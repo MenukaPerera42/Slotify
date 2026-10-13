@@ -11,9 +11,9 @@ import { Button } from "@/components/ui/button";
 
 export default function HomePage() {
   return (
-    <main className="min-h-screen bg-[#f8fafc] text-[#0f172a] flex flex-col justify-between">
+    <main className="min-h-screen bg-[#f6f7fb] text-[#111827] flex flex-col justify-between">
       {/* Top Navigation Bar */}
-      <header className="border-b border-slate-200 bg-white/90 backdrop-blur-xs sticky top-0 z-10">
+      <header className="border-b border-[#e5e7eb] bg-white/95 backdrop-blur-xs sticky top-0 z-10">
         <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="h-9 w-9 rounded-lg bg-blue-600 flex items-center justify-center text-white font-bold shadow-2xs">

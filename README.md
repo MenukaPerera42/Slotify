@@ -122,9 +122,13 @@ Slotify/
   - Resource CRUD forms: Add/Edit modal dialogs with server-side Zod validation and error normalization
   - Soft deactivation & reactivation preserving reservation audit history
   - Dedicated Resource Details view (`/resources/[id]`) with live database specifications and statistics
-  - Operations Dashboard overview (`/dashboard`) summarizing resources, categories, and bookings
+- [x] **Stage 3.1 — CSS Stabilization, Design System Repair & UI Refinement** *(Completed)*
+  - Diagnosed PostCSS pipeline mismatch with Webpack build under Tailwind CSS v4
+  - Installed `@tailwindcss/postcss` and created `postcss.config.mjs`
+  - Fully restored automated scanning and utility class generation (`.bg-blue-600`, `.flex`, `.rounded-xl`, etc.)
+  - Aligned semantic palette to spec: `#F6F7FB` canvas, `#FFFFFF` surfaces, `#2563EB` primary, `#111827` text
+  - Completed headless Chrome visual verification across desktop (1280x800) and mobile (375x812) viewports
 - [ ] **Stage 4 — Reservation Engine & Conflict Prevention**
   - Time-slot selection, concurrency locking, and overlapping booking prevention
 - [ ] **Stage 5 — Dashboard & User Interface Polish**
   - Interactive schedule views, status workflows, and responsive layouts
-# Slotify
