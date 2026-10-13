@@ -1,7 +1,8 @@
 import { getResources, getCategories } from "@/features/resources/services/resource-service";
-import { ResourceCard } from "@/features/resources/components/resource-card";
+import { AvailabilityCard } from "@/features/resources/components/availability-card";
+import { TimelineGrid } from "@/features/resources/components/timeline-grid";
+import { DateStripBar } from "@/features/resources/components/date-strip-bar";
 import { ResourceToolbar } from "@/features/resources/components/resource-toolbar";
-import { AppHeader } from "@/components/layout/app-header";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Layers } from "lucide-react";
 
@@ -25,14 +26,16 @@ export default async function ResourcesPage({
   });
 
   return (
-    <>
-      <AppHeader
-        title="Resources Catalog"
-        description="Organize conference rooms, workstations, and high-performance laboratory equipment."
-      />
+    <div className="flex-1 flex flex-col min-w-0">
+      {/* Reference Page Header */}
+      <header className="px-8 pt-7 pb-4">
+        <h1 className="text-2xl font-bold tracking-tight text-slate-900">
+          Meeting rooms
+        </h1>
+      </header>
 
-      <main className="flex-1 p-6 space-y-6 max-w-7xl mx-auto w-full">
-        {/* Filter and Action Toolbar */}
+      <main className="flex-1 px-8 pb-12 space-y-6 max-w-7xl w-full">
+        {/* Toolbar: View Tabs + Add Button + Filters */}
         <ResourceToolbar
           categories={categories}
           selectedCategory={params.categoryId || "ALL"}
@@ -40,29 +43,46 @@ export default async function ResourcesPage({
           searchQuery={params.search || ""}
         />
 
-        {/* Resources Grid */}
-        {resources.length === 0 ? (
-          <EmptyState
-            icon={<Layers className="h-6 w-6" />}
-            title="No resources found"
-            description={
-              params.search || (params.categoryId && params.categoryId !== "ALL") || params.status !== "ALL"
-                ? "No resources match your active search or filter criteria. Try resetting filters."
-                : "No resources have been registered in the system yet. Click 'Add Resource' to get started."
-            }
-          />
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-            {resources.map((resource) => (
-              <ResourceCard
-                key={resource.id}
-                resource={resource}
-                categories={categories}
-              />
-            ))}
+        {/* Date Strip Bar matching reference */}
+        <DateStripBar />
+
+        {/* Timeline Grid matching reference middle section */}
+        {resources.length > 0 && (
+          <div className="space-y-3">
+            <TimelineGrid resources={resources} />
           </div>
         )}
+
+        {/* Bottom Section: Availability Cards matching reference */}
+        <div className="space-y-3 pt-3">
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm font-bold text-slate-800">
+              Meeting room availability
+            </h2>
+            <span className="text-xs font-semibold text-slate-400">
+              {resources.length} resources found
+            </span>
+          </div>
+
+          {resources.length === 0 ? (
+            <EmptyState
+              icon={<Layers className="h-6 w-6" />}
+              title="No resources found"
+              description="No resources match your active search or category filters. Try adjusting your filter parameters."
+            />
+          ) : (
+            <div className="space-y-3">
+              {resources.map((resource) => (
+                <AvailabilityCard
+                  key={resource.id}
+                  resource={resource}
+                  categories={categories}
+                />
+              ))}
+            </div>
+          )}
+        </div>
       </main>
-    </>
+    </div>
   );
 }

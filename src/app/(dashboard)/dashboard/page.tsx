@@ -11,6 +11,8 @@ import { AppHeader } from "@/components/layout/app-header";
 import { Card, CardHeader, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 
+export const dynamic = "force-dynamic";
+
 export default async function DashboardPage() {
   const [totalResources, activeResources, totalCategories, totalReservations] =
     await Promise.all([

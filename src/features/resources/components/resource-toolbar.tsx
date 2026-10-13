@@ -2,8 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Search, Plus, Filter, RotateCcw } from "lucide-react";
-import { Input } from "@/components/ui/input";
+import { Search, Plus, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ResourceFormModal } from "./resource-form-modal";
 
@@ -17,6 +16,8 @@ interface ResourceToolbarProps {
   selectedCategory?: string;
   selectedStatus?: string;
   searchQuery?: string;
+  activeView?: "calendar" | "map";
+  onViewChange?: (view: "calendar" | "map") => void;
 }
 
 export function ResourceToolbar({
@@ -24,6 +25,8 @@ export function ResourceToolbar({
   selectedCategory = "ALL",
   selectedStatus = "ALL",
   searchQuery = "",
+  activeView = "calendar",
+  onViewChange,
 }: ResourceToolbarProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -61,88 +64,116 @@ export function ResourceToolbar({
 
   return (
     <>
-      <div className="bg-white p-4 rounded-xl border border-slate-200/90 shadow-2xs space-y-3">
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
-          {/* Search Form */}
-          <form
-            onSubmit={handleSearchSubmit}
-            className="relative flex-1 max-w-md flex items-center"
-          >
-            <Search className="absolute left-3 h-4 w-4 text-slate-400 pointer-events-none" />
-            <Input
-              type="text"
-              placeholder="Search resources by name..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="pl-9 pr-20 h-9"
-            />
-            <Button
-              type="submit"
-              size="sm"
-              variant="ghost"
-              className="absolute right-1 h-7 text-xs text-blue-600 font-semibold"
+      <div className="space-y-4">
+        {/* Top Segment: Reference-style Tabs (Calendar / Interactive map) + Add Button */}
+        <div className="flex items-center justify-between gap-4">
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => onViewChange?.("calendar")}
+              className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                activeView === "calendar"
+                  ? "bg-blue-100/70 text-blue-700 shadow-2xs"
+                  : "bg-white text-slate-500 hover:text-slate-800 border border-slate-200"
+              }`}
             >
-              Search
-            </Button>
-          </form>
+              Calendar
+            </button>
+            <button
+              type="button"
+              onClick={() => onViewChange?.("map")}
+              className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                activeView === "map"
+                  ? "bg-blue-100/70 text-blue-700 shadow-2xs"
+                  : "bg-white text-slate-500 hover:text-slate-800 border border-slate-200"
+              }`}
+            >
+              Catalog Cards
+            </button>
+          </div>
 
-          {/* Add Resource Trigger */}
           <Button
             onClick={() => setIsAddOpen(true)}
-            className="flex items-center gap-1.5 shadow-xs"
+            size="sm"
+            className="rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-medium text-xs flex items-center gap-1.5 shadow-xs"
           >
             <Plus className="h-4 w-4" />
             <span>Add Resource</span>
           </Button>
         </div>
 
-        {/* Filter Controls Row */}
-        <div className="flex flex-wrap items-center gap-3 pt-3 border-t border-slate-100 text-xs">
-          <div className="flex items-center gap-1.5 text-slate-500 font-medium">
-            <Filter className="h-3.5 w-3.5" />
-            <span>Filters:</span>
+        {/* Filter inputs matching reference screenshot search pills */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+          {/* Search Input Box */}
+          <form onSubmit={handleSearchSubmit} className="relative flex items-center">
+            <Search className="absolute left-3.5 h-4 w-4 text-slate-400 pointer-events-none" />
+            <input
+              type="text"
+              placeholder="Search resource name..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="h-10 w-full rounded-xl border border-[#E5E7EB] bg-white pl-9 pr-16 text-xs text-slate-800 shadow-2xs placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-600 focus:border-transparent transition-all"
+            />
+            {search && (
+              <button
+                type="submit"
+                className="absolute right-2 px-2 py-1 text-[11px] font-semibold text-blue-600 hover:text-blue-700"
+              >
+                Go
+              </button>
+            )}
+          </form>
+
+          {/* Category Dropdown styled as pill */}
+          <div className="relative">
+            <select
+              value={selectedCategory}
+              onChange={(e) => updateFilters("categoryId", e.target.value)}
+              disabled={isPending}
+              className="h-10 w-full rounded-xl border border-[#E5E7EB] bg-white px-3.5 text-xs text-slate-700 shadow-2xs focus:outline-none focus:ring-2 focus:ring-blue-600 transition-all appearance-none cursor-pointer"
+            >
+              <option value="ALL">Filter categories (All)</option>
+              {categories.map((cat) => (
+                <option key={cat.id} value={cat.id}>
+                  {cat.name}
+                </option>
+              ))}
+            </select>
+            <div className="absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400 text-xs">
+              ▼
+            </div>
           </div>
 
-          {/* Category Dropdown */}
-          <select
-            value={selectedCategory}
-            onChange={(e) => updateFilters("categoryId", e.target.value)}
-            disabled={isPending}
-            className="h-8 rounded-lg border border-slate-200 bg-white px-2.5 text-xs text-slate-800 shadow-2xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
-          >
-            <option value="ALL">All Categories</option>
-            {categories.map((cat) => (
-              <option key={cat.id} value={cat.id}>
-                {cat.name}
-              </option>
-            ))}
-          </select>
+          {/* Status Dropdown styled as pill */}
+          <div className="flex items-center gap-2">
+            <div className="relative flex-1">
+              <select
+                value={selectedStatus}
+                onChange={(e) => updateFilters("status", e.target.value)}
+                disabled={isPending}
+                className="h-10 w-full rounded-xl border border-[#E5E7EB] bg-white px-3.5 text-xs text-slate-700 shadow-2xs focus:outline-none focus:ring-2 focus:ring-blue-600 transition-all appearance-none cursor-pointer"
+              >
+                <option value="ALL">Operational status (All)</option>
+                <option value="ACTIVE">Active Available</option>
+                <option value="INACTIVE">Deactivated</option>
+              </select>
+              <div className="absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400 text-xs">
+                ▼
+              </div>
+            </div>
 
-          {/* Status Dropdown */}
-          <select
-            value={selectedStatus}
-            onChange={(e) => updateFilters("status", e.target.value)}
-            disabled={isPending}
-            className="h-8 rounded-lg border border-slate-200 bg-white px-2.5 text-xs text-slate-800 shadow-2xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
-          >
-            <option value="ALL">All Statuses</option>
-            <option value="ACTIVE">Active Only</option>
-            <option value="INACTIVE">Inactive Only</option>
-          </select>
-
-          {(selectedCategory !== "ALL" ||
-            selectedStatus !== "ALL" ||
-            searchQuery !== "") && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={handleReset}
-              className="h-8 text-xs text-slate-500 hover:text-slate-800 flex items-center gap-1"
-            >
-              <RotateCcw className="h-3 w-3" />
-              <span>Reset</span>
-            </Button>
-          )}
+            {(selectedCategory !== "ALL" || selectedStatus !== "ALL" || searchQuery !== "") && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleReset}
+                className="h-10 text-xs text-slate-500 hover:text-slate-800"
+                title="Reset filters"
+              >
+                <RotateCcw className="h-3.5 w-3.5" />
+              </Button>
+            )}
+          </div>
         </div>
       </div>
 
@@ -154,4 +185,3 @@ export function ResourceToolbar({
     </>
   );
 }
-

@@ -9,7 +9,8 @@ import {
   Menu,
   X,
   Shield,
-  CalendarCheck2,
+  Zap,
+  Bell,
 } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
@@ -38,13 +39,14 @@ export function AppSidebar() {
 
   return (
     <>
-      {/* Mobile Menu Button (Floating / Top Bar) */}
-      <div className="lg:hidden flex items-center justify-between px-4 py-3 bg-white border-b border-slate-200 sticky top-0 z-30">
+      {/* Mobile Top Navbar */}
+      <div className="lg:hidden flex items-center justify-between px-5 py-3.5 bg-white border-b border-[#E5E7EB] sticky top-0 z-30">
         <Link href="/dashboard" className="flex items-center gap-2.5">
-          <div className="h-8 w-8 rounded-lg bg-blue-600 flex items-center justify-center text-white shadow-2xs">
-            <CalendarCheck2 className="h-4 w-4" />
+          <div className="flex items-center gap-1.5">
+            <span className="h-2.5 w-2.5 rounded-full bg-blue-600"></span>
+            <span className="h-3 w-3 rounded-full bg-blue-600 -ml-1"></span>
           </div>
-          <span className="font-bold text-slate-900 tracking-tight text-base">
+          <span className="font-bold text-slate-900 tracking-tight text-lg">
             Slotify
           </span>
         </Link>
@@ -54,56 +56,47 @@ export function AppSidebar() {
           className="p-1.5 rounded-lg text-slate-600 hover:bg-slate-100"
           aria-label="Toggle navigation"
         >
-          {mobileMenuOpen ? (
-            <X className="h-6 w-6" />
-          ) : (
-            <Menu className="h-6 w-6" />
-          )}
+          {mobileMenuOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
         </button>
       </div>
 
       {/* Mobile Drawer Overlay */}
       {mobileMenuOpen && (
         <div
-          className="fixed inset-0 bg-slate-900/50 z-40 lg:hidden backdrop-blur-2xs"
+          className="fixed inset-0 bg-slate-900/40 z-40 lg:hidden backdrop-blur-2xs"
           onClick={() => setMobileMenuOpen(false)}
         />
       )}
 
-      {/* Sidebar Content (Desktop Sticky + Mobile Drawer) */}
+      {/* Sidebar (Desktop Sticky + Mobile Drawer) */}
       <aside
         className={cn(
-          "fixed top-0 bottom-0 left-0 z-40 w-64 bg-white border-r border-slate-200/90 flex flex-col justify-between transition-transform duration-200 ease-in-out lg:static lg:translate-x-0",
+          "fixed top-0 bottom-0 left-0 z-40 w-56 bg-white border-r border-[#E5E7EB] flex flex-col justify-between transition-transform duration-200 ease-in-out lg:static lg:translate-x-0 shrink-0 select-none",
           mobileMenuOpen ? "translate-x-0" : "-translate-x-full"
         )}
       >
-        <div>
-          {/* Brand Header */}
-          <div className="h-16 px-6 flex items-center border-b border-slate-100">
+        <div className="flex flex-col">
+          {/* Logo / Brand Header */}
+          <div className="h-16 px-6 flex items-center">
             <Link
               href="/dashboard"
-              className="flex items-center gap-3 group"
+              className="flex items-center gap-2 group"
               onClick={() => setMobileMenuOpen(false)}
             >
-              <div className="h-9 w-9 rounded-xl bg-blue-600 flex items-center justify-center text-white shadow-xs group-hover:bg-blue-700 transition-colors">
-                <CalendarCheck2 className="h-5 w-5" />
+              {/* Reference-style geometric dot cluster icon */}
+              <div className="flex items-center -space-x-1">
+                <span className="h-2.5 w-2.5 rounded-full bg-blue-600"></span>
+                <span className="h-3.5 w-3.5 rounded-full bg-blue-600"></span>
+                <span className="h-2 w-2 rounded-full bg-blue-400"></span>
               </div>
-              <div className="flex flex-col">
-                <span className="font-bold text-slate-900 text-lg leading-tight tracking-tight">
-                  Slotify
-                </span>
-                <span className="text-[11px] font-medium text-slate-400">
-                  Resource Manager
-                </span>
-              </div>
+              <span className="font-extrabold text-slate-900 text-xl tracking-tight ml-1.5">
+                Slotify
+              </span>
             </Link>
           </div>
 
           {/* Navigation Links */}
-          <nav className="p-4 space-y-1">
-            <div className="px-3 py-2 text-[11px] font-semibold tracking-wider text-slate-400 uppercase">
-              Management
-            </div>
+          <nav className="px-3 py-2 space-y-1">
             {navigationItems.map((item) => {
               const Icon = item.icon;
               const isActive =
@@ -116,9 +109,9 @@ export function AppSidebar() {
                   href={item.href}
                   onClick={() => setMobileMenuOpen(false)}
                   className={cn(
-                    "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all group",
+                    "flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-medium transition-all group",
                     isActive
-                      ? "bg-blue-50/80 text-blue-700 font-semibold shadow-2xs"
+                      ? "bg-blue-50 text-blue-600 font-semibold shadow-2xs"
                       : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
                   )}
                 >
@@ -135,26 +128,45 @@ export function AppSidebar() {
               );
             })}
           </nav>
+
+          {/* Section Divider matching reference */}
+          <div className="px-6 py-3">
+            <div className="h-px bg-slate-100" />
+            <span className="text-[10px] font-semibold tracking-wider text-slate-300 uppercase block mt-3">
+              Assessment Scope
+            </span>
+          </div>
+
+          <div className="px-3 space-y-1 text-xs text-slate-400">
+            <div className="flex items-center gap-3 px-3.5 py-2 rounded-xl text-slate-400 select-none">
+              <Zap className="h-4 w-4 text-slate-300" />
+              <span>Quick Actions</span>
+            </div>
+            <div className="flex items-center justify-between px-3.5 py-2 rounded-xl text-slate-400 select-none">
+              <div className="flex items-center gap-3">
+                <Bell className="h-4 w-4 text-slate-300" />
+                <span>Notifications</span>
+              </div>
+              <span className="h-4 min-w-4 px-1 rounded-full bg-rose-500 text-white text-[10px] font-bold flex items-center justify-center">
+                3
+              </span>
+            </div>
+          </div>
         </div>
 
-        {/* Demo User Badge & Footer */}
+        {/* User Card at bottom of sidebar matching reference */}
         <div className="p-4 border-t border-slate-100">
-          <div className="rounded-xl bg-slate-50 border border-slate-200/80 p-3">
-            <div className="flex items-center gap-2.5">
-              <div className="h-8 w-8 rounded-lg bg-blue-100 border border-blue-200 text-blue-700 flex items-center justify-center font-bold text-xs">
-                AV
-              </div>
-              <div className="flex flex-col min-w-0">
-                <span className="text-xs font-semibold text-slate-800 truncate">
-                  Alex Vance
-                </span>
-                <span className="text-[10px] text-slate-400 flex items-center gap-1">
-                  <Shield className="h-2.5 w-2.5 text-blue-500" /> Demo Admin
-                </span>
-              </div>
+          <div className="flex items-center gap-2.5">
+            <div className="h-8 w-8 rounded-full bg-slate-200 border border-slate-300 flex items-center justify-center text-slate-700 font-semibold text-xs shrink-0">
+              AV
             </div>
-            <div className="mt-2 text-[10px] text-slate-400 italic">
-              MVP assessment context
+            <div className="flex flex-col min-w-0">
+              <span className="text-xs font-semibold text-slate-800 truncate">
+                Alex Vance
+              </span>
+              <span className="text-[10px] text-slate-400 flex items-center gap-1">
+                <Shield className="h-2.5 w-2.5 text-blue-500" /> Demo Admin
+              </span>
             </div>
           </div>
         </div>
@@ -162,4 +174,3 @@ export function AppSidebar() {
     </>
   );
 }
-
