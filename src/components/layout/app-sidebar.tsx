@@ -16,6 +16,7 @@ import {
 import { useState } from "react";
 import { cn } from "@/lib/utils";
 import { logoutAction } from "@/features/auth/actions";
+import { SlotifyLogo } from "./slotify-logo";
 
 const baseNavigationItems = [
   {
@@ -44,13 +45,7 @@ export function AppSidebar({ user }: { user: { name: string; email: string; role
       {/* Mobile Top Navbar */}
       <div className="lg:hidden flex items-center justify-between px-5 py-3.5 bg-white border-b border-[#E5E7EB] sticky top-0 z-30">
         <Link href="/dashboard" className="flex items-center gap-2.5">
-          <div className="flex items-center gap-1.5">
-            <span className="h-2.5 w-2.5 rounded-full bg-blue-600"></span>
-            <span className="h-3 w-3 rounded-full bg-blue-600 -ml-1"></span>
-          </div>
-          <span className="font-bold text-slate-900 tracking-tight text-lg">
-            Slotify
-          </span>
+          <SlotifyLogo className="w-32" priority />
         </Link>
         <button
           type="button"
@@ -85,15 +80,7 @@ export function AppSidebar({ user }: { user: { name: string; email: string; role
               className="flex items-center gap-2 group"
               onClick={() => setMobileMenuOpen(false)}
             >
-              {/* Reference-style geometric dot cluster icon */}
-              <div className="flex items-center -space-x-1">
-                <span className="h-2.5 w-2.5 rounded-full bg-blue-600"></span>
-                <span className="h-3.5 w-3.5 rounded-full bg-blue-600"></span>
-                <span className="h-2 w-2 rounded-full bg-blue-400"></span>
-              </div>
-              <span className="font-extrabold text-slate-900 text-xl tracking-tight ml-1.5">
-                Slotify
-              </span>
+              <SlotifyLogo className="w-40" priority />
             </Link>
           </div>
 

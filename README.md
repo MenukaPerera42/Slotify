@@ -77,7 +77,7 @@ Slotify/
    ```bash
    cp .env.example .env
    ```
-   *(Set `DATABASE_URL`, `AUTH_SECRET`, `AUTH_URL`, and local demo passwords before migrating and seeding.)*
+   *(Set `DATABASE_URL` and `AUTH_URL` to your local values. Run `npm run db:setup-demo` to fill missing secrets in the ignored `.env` without printing them.)*
 
 3. Install project dependencies:
    ```bash
@@ -130,6 +130,8 @@ Slotify/
   - Completed headless Chrome visual verification across desktop (1280x800) and mobile (375x812) viewports
 - [x] **Stage 4 — Authentication, RBAC & Reservation Domain Preparation** *(Completed)*
   - Auth.js credential login, server-side role checks, approval-ready status migration, and pending/approved overlap protection
+- [x] **Stage 4.1 — Public Member Sign-Up & Authentication UI** *(Completed)*
+  - Member-only registration, shared rate limits, explicit demo credential management, and supplied logo integration
 - [ ] **Stage 5 — Booking Requests & Approval Workflow**
   - Member requests, admin approval/rejection, cancellation, and conflict-friendly errors
 
@@ -139,7 +141,11 @@ Slotify/
 
 Auth.js Credentials handles login, logout, CSRF protection, and an encrypted HTTP-only session cookie (8-hour maximum age). Argon2id hashes are stored in `users.passwordHash`. Each protected server render or mutation reloads the current user from PostgreSQL, so role changes and deactivation take effect immediately. Set a strong `AUTH_SECRET` in the ignored `.env` file; use `openssl rand -base64 32` to generate it. Set `AUTH_URL` to the exact application origin (including port). HTTPS deployments use secure cookies.
 
-Public registration is disabled. To create or refresh local demo credentials, set `SLOTIFY_DEMO_ADMIN_PASSWORD` and `SLOTIFY_DEMO_MEMBER_PASSWORD` to different 12+ character secrets in ignored `.env`, then run `npm run db:seed`. The seed is additive: it never deletes existing reservations or resources. Demo emails are `alex.admin@primewave.local` (ADMIN) and `sarah.chen@primewave.local` (MEMBER); David and Emily use the member password as well. Keep the passwords local and do not commit `.env`.
+Public registration is available at `/signup` and always creates a MEMBER account. Sign-up validates the name, email and password on the server, requires at least 12 password characters, hashes with Argon2id, and relies on both application handling and database uniqueness for duplicates. Database-backed limits allow six sign-up submissions per address and 100 globally per hour, plus three per normalized email per day. Login permits eight attempts per normalized email, 30 per address, and 300 globally per 15 minutes. The address limit assumes a reverse proxy that overwrites forwarded address headers; email and global limits still apply independently.
+
+For local demo credentials, run `npm run db:setup-demo` after copying `.env.example` to `.env`. It fills only blank `AUTH_SECRET`, `SLOTIFY_DEMO_ADMIN_PASSWORD`, and `SLOTIFY_DEMO_MEMBER_PASSWORD` values, keeps existing values, sets `.env` permissions to `0600`, and does not print secrets. Then run `npm run db:seed` before opening public registration. The seed creates missing demo users and resources and provisions hashes only where absent; it **never rotates an existing password hash or changes an existing role**. It stops if the existing admin email belongs to a non-admin account. Demo emails are `alex.admin@primewave.local` (ADMIN) and `sarah.chen@primewave.local` (MEMBER); David and Emily use the member password as well. Read the passwords only from your local ignored `.env`, and never commit that file.
+
+To intentionally reset an existing demo account, update its corresponding password variable in `.env`, then run `npm run db:reset-demo-password -- alex.admin@primewave.local` (or another documented demo email). This changes only that account's hash and does not print the password. For member accounts sharing the member variable, reset each account you intend to update. Existing sessions remain valid until their eight-hour expiry unless the user is deactivated.
 
 | Operation | ADMIN | MEMBER |
 |---|---:|---:|
@@ -153,3 +159,9 @@ Public registration is disabled. To create or refresh local demo credentials, se
 Reservation statuses are `PENDING`, `APPROVED`, `REJECTED`, and `CANCELLED`. Six preexisting `CONFIRMED` records were migrated to `APPROVED` on the local database. PostgreSQL enforces `[startTime, endTime)` overlap exclusion for `PENDING` and `APPROVED`, valid time order, status transitions, and last-active-admin protection. Resource and user deletion is restricted when reservation history exists; inactive resources reject new pending or approved reservations. Application instants are stored in UTC (`timestamptz`); business presentation uses `Asia/Colombo` (Sri Lanka).
 
 Stage 5 should add booking and approval actions with server-side identity checks and translate PostgreSQL exclusion error `23P01` into a useful slot-conflict message.
+
+## Stage 4.1 sign-up and branding
+
+The supplied `public/logo.png` is used in the sidebar and authentication pages. It is a wide wordmark, so the existing valid favicon remains in use. Admin account creation is not exposed publicly; only an authorized admin can promote a member from Administration. Run `npm run db:setup-demo`, `npx prisma migrate deploy`, and `npm run db:seed` for a fresh local setup.
+
+With the app running on `http://localhost:3100`, run `npm run test:auth` to execute the Stage 4.1 integration suite. It creates and removes only synthetic test users and uses the configured local admin password without printing it.

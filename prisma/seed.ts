@@ -8,23 +8,26 @@ async function main() {
 
   const adminPassword = process.env.SLOTIFY_DEMO_ADMIN_PASSWORD;
   const memberPassword = process.env.SLOTIFY_DEMO_MEMBER_PASSWORD;
-  if (!adminPassword || !memberPassword || adminPassword.length < 12 || memberPassword.length < 12) {
-    throw new Error("Set SLOTIFY_DEMO_ADMIN_PASSWORD and SLOTIFY_DEMO_MEMBER_PASSWORD (12+ characters) before seeding.");
-  }
-  const adminHash = await hash(adminPassword);
-  const memberHash = await hash(memberPassword);
-  const upsertDemoUser = (name: string, email: string, role: UserRole, passwordHash: string) =>
-    prisma.user.upsert({
-      where: { email },
-      create: { name, email, role, passwordHash },
-      update: { passwordHash },
-    });
-  const alexAdmin = await upsertDemoUser("Alex Vance", "alex.admin@primewave.local", UserRole.ADMIN, adminHash);
-  const sarahMember = await upsertDemoUser("Sarah Chen", "sarah.chen@primewave.local", UserRole.MEMBER, memberHash);
-  const davidMember = await upsertDemoUser("David Kim", "david.kim@primewave.local", UserRole.MEMBER, memberHash);
-  const emilyMember = await upsertDemoUser("Emily Watson", "emily.watson@primewave.local", UserRole.MEMBER, memberHash);
+  const ensureDemoUser = async (name: string, email: string, role: UserRole, password?: string) => {
+    const existing = await prisma.user.findUnique({ where: { email } });
+    if (existing && role === UserRole.ADMIN && existing.role !== UserRole.ADMIN) {
+      throw new Error(`The existing ${email} account is not an admin. Review it before seeding.`);
+    }
+    if (existing?.passwordHash) return existing;
+    if (!password || password.length < 12) {
+      throw new Error(`Set the 12+ character demo password environment variable before provisioning ${email}.`);
+    }
+    const passwordHash = await hash(password);
+    return existing
+      ? prisma.user.update({ where: { id: existing.id }, data: { passwordHash } })
+      : prisma.user.create({ data: { name, email, role, passwordHash } });
+  };
+  const alexAdmin = await ensureDemoUser("Alex Vance", "alex.admin@primewave.local", UserRole.ADMIN, adminPassword);
+  const sarahMember = await ensureDemoUser("Sarah Chen", "sarah.chen@primewave.local", UserRole.MEMBER, memberPassword);
+  const davidMember = await ensureDemoUser("David Kim", "david.kim@primewave.local", UserRole.MEMBER, memberPassword);
+  const emilyMember = await ensureDemoUser("Emily Watson", "emily.watson@primewave.local", UserRole.MEMBER, memberPassword);
 
-  console.log(`👤 Seeded 4 users (1 Admin, 3 Members).`);
+  console.log(`👤 Demo users present; existing credentials and roles were preserved.`);
 
   // 3. Seed Resource Categories
   const catMeetingRooms = await prisma.resourceCategory.upsert({

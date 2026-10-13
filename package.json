@@ -8,8 +8,11 @@
     "start": "next start",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
+    "test:auth": "node --env-file=.env tests/auth-stage41.mjs",
     "format": "prettier --write .",
     "db:seed": "node --env-file=.env --import tsx prisma/seed.ts",
+    "db:setup-demo": "node --import tsx prisma/setup-demo-credentials.ts",
+    "db:reset-demo-password": "node --env-file=.env --import tsx prisma/reset-demo-password.ts",
     "db:migrate": "prisma migrate dev"
   },
   "dependencies": {

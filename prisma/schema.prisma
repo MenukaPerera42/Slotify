@@ -33,6 +33,15 @@ model User {
   @@map("users")
 }
 
+model AuthRateLimit {
+  key      String   @id
+  attempts Int
+  resetAt  DateTime @db.Timestamptz(3)
+
+  @@index([resetAt])
+  @@map("auth_rate_limits")
+}
+
 model ResourceCategory {
   id          String     @id @default(uuid()) @db.Uuid
   name        String     @unique
