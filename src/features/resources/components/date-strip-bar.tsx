@@ -42,7 +42,7 @@ export function DateStripBar() {
               type="button"
               onClick={() => setSelectedDate(item.date)}
               className={cn(
-                "flex-1 min-w-[58px] py-2 px-1 rounded-xl flex flex-col items-center justify-center transition-all border shadow-2xs",
+                "flex-1 min-w-0 py-1.5 px-0.5 sm:px-1 rounded-xl flex flex-col items-center justify-center transition-all border shadow-2xs",
                 isCurrent
                   ? "bg-blue-50 border-blue-200 text-blue-700 shadow-xs"
                   : "bg-white border-slate-200/80 text-slate-600 hover:border-slate-300"

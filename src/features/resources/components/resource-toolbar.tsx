@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Search, Plus, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ResourceFormModal } from "./resource-form-modal";
+import { DateStripBar } from "./date-strip-bar";
 
 interface CategoryItem {
   id: string;
@@ -101,6 +102,9 @@ export function ResourceToolbar({
             <span>Add Resource</span>
           </Button>
         </div>
+
+        {/* Date Strip Bar matching reference screenshot position */}
+        <DateStripBar />
 
         {/* Filter inputs matching reference screenshot search pills */}
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">

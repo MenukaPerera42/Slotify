@@ -1,7 +1,6 @@
 import { getResources, getCategories } from "@/features/resources/services/resource-service";
 import { AvailabilityCard } from "@/features/resources/components/availability-card";
 import { TimelineGrid } from "@/features/resources/components/timeline-grid";
-import { DateStripBar } from "@/features/resources/components/date-strip-bar";
 import { ResourceToolbar } from "@/features/resources/components/resource-toolbar";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Layers } from "lucide-react";
@@ -35,16 +34,13 @@ export default async function ResourcesPage({
       </header>
 
       <main className="flex-1 px-8 pb-12 space-y-6 max-w-7xl w-full">
-        {/* Toolbar: View Tabs + Add Button + Filters */}
+        {/* Toolbar: View Tabs + Date Strip Bar + Filters */}
         <ResourceToolbar
           categories={categories}
           selectedCategory={params.categoryId || "ALL"}
           selectedStatus={params.status || "ALL"}
           searchQuery={params.search || ""}
         />
-
-        {/* Date Strip Bar matching reference */}
-        <DateStripBar />
 
         {/* Timeline Grid matching reference middle section */}
         {resources.length > 0 && (
