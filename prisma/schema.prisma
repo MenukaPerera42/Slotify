@@ -1,0 +1,77 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum UserRole {
+  ADMIN
+  MEMBER
+}
+
+enum ReservationStatus {
+  CONFIRMED
+  CANCELLED
+}
+
+model User {
+  id           String        @id @default(uuid()) @db.Uuid
+  name         String
+  email        String        @unique
+  role         UserRole      @default(MEMBER)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  reservations Reservation[]
+
+  @@map("users")
+}
+
+model ResourceCategory {
+  id          String     @id @default(uuid()) @db.Uuid
+  name        String     @unique
+  description String?
+  createdAt   DateTime   @default(now())
+  resources   Resource[]
+
+  @@map("resource_categories")
+}
+
+model Resource {
+  id           String           @id @default(uuid()) @db.Uuid
+  name         String
+  description  String?
+  categoryId   String           @db.Uuid
+  location     String
+  capacity     Int?
+  isActive     Boolean          @default(true)
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+  category     ResourceCategory @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  reservations Reservation[]
+
+  @@index([categoryId])
+  @@index([isActive])
+  @@map("resources")
+}
+
+model Reservation {
+  id         String            @id @default(uuid()) @db.Uuid
+  resourceId String            @db.Uuid
+  userId     String            @db.Uuid
+  title      String
+  startTime  DateTime
+  endTime    DateTime
+  status     ReservationStatus @default(CONFIRMED)
+  createdAt  DateTime          @default(now())
+  updatedAt  DateTime          @updatedAt
+  resource   Resource          @relation(fields: [resourceId], references: [id], onDelete: Cascade)
+  user       User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([resourceId, startTime, endTime])
+  @@index([userId])
+  @@index([status])
+  @@map("reservations")
+}
