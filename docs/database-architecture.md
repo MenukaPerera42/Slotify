@@ -13,15 +13,15 @@ erDiagram
         varchar name "User full name"
         varchar email UK "Unique corporate email"
         UserRole role "ADMIN | MEMBER"
-        timestamp createdAt "Default CURRENT_TIMESTAMP"
-        timestamp updatedAt "Auto-updated timestamp"
+        timestamptz createdAt "Default CURRENT_TIMESTAMP"
+        timestamptz updatedAt "Auto-updated timestamp"
     }
 
     resource_categories {
         uuid id PK "Primary Key"
         varchar name UK "Category name (unique)"
         text description "Nullable description"
-        timestamp createdAt "Default CURRENT_TIMESTAMP"
+        timestamptz createdAt "Default CURRENT_TIMESTAMP"
     }
 
     resources {
@@ -32,8 +32,8 @@ erDiagram
         varchar location "Building, room, or rack position"
         integer capacity "Nullable capacity"
         boolean isActive "Default true"
-        timestamp createdAt "Default CURRENT_TIMESTAMP"
-        timestamp updatedAt "Auto-updated timestamp"
+        timestamptz createdAt "Default CURRENT_TIMESTAMP"
+        timestamptz updatedAt "Auto-updated timestamp"
     }
 
     reservations {
@@ -41,16 +41,16 @@ erDiagram
         uuid resourceId FK "Foreign Key -> resources.id"
         uuid userId FK "Foreign Key -> users.id"
         varchar title "Booking title or purpose"
-        timestamp startTime "Reservation start window"
-        timestamp endTime "Reservation end window"
-        ReservationStatus status "CONFIRMED | CANCELLED"
-        timestamp createdAt "Default CURRENT_TIMESTAMP"
-        timestamp updatedAt "Auto-updated timestamp"
+        timestamptz startTime "Reservation start window"
+        timestamptz endTime "Reservation end window"
+        ReservationStatus status "PENDING | APPROVED | REJECTED | CANCELLED"
+        timestamptz createdAt "Default CURRENT_TIMESTAMP"
+        timestamptz updatedAt "Auto-updated timestamp"
     }
 
-    users ||--o{ reservations : "places (1:N, Cascade)"
+    users ||--o{ reservations : "places (1:N, Restrict)"
     resource_categories ||--o{ resources : "categorizes (1:N, Restrict)"
-    resources ||--o{ reservations : "allocated_to (1:N, Cascade)"
+    resources ||--o{ reservations : "allocated_to (1:N, Restrict)"
 ```
 
 ---
@@ -62,7 +62,7 @@ erDiagram
 - **Primary Key**: `id` (`UUID`, generated via `gen_random_uuid()` / `@default(uuid())`).
 - **Uniqueness**: `email` (`UNIQUE`).
 - **Enum**: `role` (`UserRole`: `ADMIN`, `MEMBER`).
-- **Relationships**: `1:N` with `reservations` (`onDelete: Cascade`).
+- **Relationships**: `1:N` with `reservations` (`onDelete: Restrict`).
 - **MVP Note**: Serves as the identity foundation for MVP assessment testing without mock session state or fake security.
 
 ### `resource_categories`
@@ -76,18 +76,18 @@ erDiagram
 - **Primary Key**: `id` (`UUID`).
 - **Foreign Keys**: `categoryId` (`UUID`, references `resource_categories.id`).
 - **Indexes**: `categoryId`, `isActive`.
-- **Relationships**: `1:N` with `reservations` (`onDelete: Cascade`).
+- **Relationships**: `1:N` with `reservations` (`onDelete: Restrict`).
 
 ### `reservations`
 - **Purpose**: Time-bound resource bookings created by users.
 - **Primary Key**: `id` (`UUID`).
 - **Foreign Keys**: `resourceId` (`UUID`), `userId` (`UUID`).
-- **Timestamps**: `startTime`, `endTime` (stored in UTC without timezone offset ambiguity).
+- **Timestamps**: `startTime`, `endTime` and audit timestamps (stored as UTC instants in PostgreSQL `timestamptz`; presented in `Asia/Colombo`).
 - **Check Constraint**: `reservations_start_before_end_check` enforcing `"startTime" < "endTime"`.
 - **Indexes**:
   - `(resourceId, startTime, endTime)` compound index for rapid interval overlap querying.
   - `userId` for quick user booking lookups.
-  - `status` for filtering confirmed vs cancelled bookings.
+  - `status` for filtering pending/approved vs rejected/cancelled bookings.
 
 ---
 
@@ -105,16 +105,16 @@ We leverage PostgreSQL's native `btree_gist` extension and an **`EXCLUDE USING g
 ```sql
 CREATE EXTENSION IF NOT EXISTS btree_gist;
 
-ALTER TABLE "reservations" ADD CONSTRAINT "reservations_no_overlap_confirmed_excl"
+ALTER TABLE "reservations" ADD CONSTRAINT "reservations_no_overlap_blocking_excl"
 EXCLUDE USING gist (
   "resourceId" WITH =,
-  tsrange("startTime", "endTime", '[)') WITH &&
+  tstzrange("startTime", "endTime", '[)') WITH &&
 )
-WHERE ("status" = 'CONFIRMED');
+WHERE ("status" IN ('PENDING', 'APPROVED'));
 ```
 
 #### Why `[)` (Half-Open Interval)?
 - `[startTime, endTime)` includes the exact start millisecond but excludes the end millisecond.
 - This permits **adjacent back-to-back bookings** (e.g. 09:00–10:00 followed immediately by 10:00–11:00 on the same room) with zero gaps, while strictly blocking any true overlap.
-- The partial clause `WHERE ("status" = 'CONFIRMED')` ensures that cancelled reservations do not block future reservations on that same time window.
+- The partial clause `WHERE ("status" IN ('PENDING', 'APPROVED'))` ensures that rejected and cancelled reservations do not block future reservations on that same time window.
 

@@ -14,6 +14,7 @@ interface CategoryItem {
 
 interface ResourceToolbarProps {
   categories: CategoryItem[];
+  canManage?: boolean;
   selectedCategory?: string;
   selectedStatus?: string;
   searchQuery?: string;
@@ -23,6 +24,7 @@ interface ResourceToolbarProps {
 
 export function ResourceToolbar({
   categories,
+  canManage = false,
   selectedCategory = "ALL",
   selectedStatus = "ALL",
   searchQuery = "",
@@ -93,14 +95,14 @@ export function ResourceToolbar({
             </button>
           </div>
 
-          <Button
+          {canManage && <Button
             onClick={() => setIsAddOpen(true)}
             size="sm"
             className="rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-medium text-xs flex items-center gap-1.5 shadow-xs"
           >
             <Plus className="h-4 w-4" />
             <span>Add Resource</span>
-          </Button>
+          </Button>}
         </div>
 
         {/* Date Strip Bar matching reference screenshot position */}
@@ -181,11 +183,11 @@ export function ResourceToolbar({
         </div>
       </div>
 
-      <ResourceFormModal
+      {canManage && <ResourceFormModal
         isOpen={isAddOpen}
         onClose={() => setIsAddOpen(false)}
         categories={categories}
-      />
+      />}
     </>
   );
 }

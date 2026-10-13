@@ -116,7 +116,7 @@ export default function HomePage() {
       <footer className="border-t border-slate-200 bg-white py-6">
         <div className="max-w-7xl mx-auto px-6 flex flex-col sm:flex-row items-center justify-between text-xs text-slate-500 gap-2">
           <span>PrimeWave Lab Technical Assessment — Slotify</span>
-          <span>Stage 3 Completed • Resource Management & Application Shell</span>
+          <span>Stage 4 Completed • Authentication & Reservation Domain</span>
         </div>
       </footer>
     </main>

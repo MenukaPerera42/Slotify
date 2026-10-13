@@ -4,6 +4,7 @@ import { TimelineGrid } from "@/features/resources/components/timeline-grid";
 import { ResourceToolbar } from "@/features/resources/components/resource-toolbar";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Layers } from "lucide-react";
+import { requireUser } from "@/lib/authorization";
 
 interface ResourcesPageProps {
   searchParams: Promise<{
@@ -16,6 +17,7 @@ interface ResourcesPageProps {
 export default async function ResourcesPage({
   searchParams,
 }: ResourcesPageProps) {
+  const user = await requireUser();
   const params = await searchParams;
   const categories = await getCategories();
   const resources = await getResources({
@@ -37,6 +39,7 @@ export default async function ResourcesPage({
         {/* Toolbar: View Tabs + Date Strip Bar + Filters */}
         <ResourceToolbar
           categories={categories}
+          canManage={user.role === "ADMIN"}
           selectedCategory={params.categoryId || "ALL"}
           selectedStatus={params.status || "ALL"}
           searchQuery={params.search || ""}
@@ -73,6 +76,7 @@ export default async function ResourcesPage({
                   key={resource.id}
                   resource={resource}
                   categories={categories}
+                  canManage={user.role === "ADMIN"}
                 />
               ))}
             </div>

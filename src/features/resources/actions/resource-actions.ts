@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { requireAdmin } from "@/lib/authorization";
 import {
   createResource,
   updateResource,
@@ -19,6 +20,7 @@ export async function createResourceAction(
   formData: unknown
 ): Promise<ActionResponse> {
   try {
+    await requireAdmin();
     const validated = resourceSchema.safeParse(formData);
 
     if (!validated.success) {
@@ -54,6 +56,7 @@ export async function updateResourceAction(
   formData: unknown
 ): Promise<ActionResponse> {
   try {
+    await requireAdmin();
     if (!id) {
       return { success: false, error: "Resource ID is required." };
     }
@@ -92,6 +95,7 @@ export async function toggleResourceStatusAction(
   id: string
 ): Promise<ActionResponse> {
   try {
+    await requireAdmin();
     if (!id) {
       return { success: false, error: "Resource ID is required." };
     }

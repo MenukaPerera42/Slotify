@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { requireAdmin } from "@/lib/authorization";
 import type { ResourceFormData, ResourceQueryParams } from "../schemas/resource-schema";
 
 export async function getCategories() {
@@ -35,7 +36,7 @@ export async function getResources(params?: ResourceQueryParams) {
         select: {
           reservations: {
             where: {
-              status: "CONFIRMED",
+              status: { in: ["PENDING", "APPROVED"] },
             },
           },
         },
@@ -60,6 +61,7 @@ export async function getResourceById(id: string) {
 }
 
 export async function createResource(data: ResourceFormData) {
+  await requireAdmin();
   // Verify category exists
   const category = await prisma.resourceCategory.findUnique({
     where: { id: data.categoryId },
@@ -85,6 +87,7 @@ export async function createResource(data: ResourceFormData) {
 }
 
 export async function updateResource(id: string, data: ResourceFormData) {
+  await requireAdmin();
   // Verify resource exists
   const existing = await prisma.resource.findUnique({
     where: { id },
@@ -120,6 +123,7 @@ export async function updateResource(id: string, data: ResourceFormData) {
 }
 
 export async function toggleResourceStatus(id: string) {
+  await requireAdmin();
   const existing = await prisma.resource.findUnique({
     where: { id },
     select: { id: true, isActive: true },

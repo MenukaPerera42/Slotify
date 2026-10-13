@@ -1,70 +1,54 @@
 import { PrismaClient, UserRole, ReservationStatus } from "@prisma/client";
+import { hash } from "argon2";
 
 const prisma = new PrismaClient();
 
 async function main() {
   console.log("🌱 Starting database seeding...");
 
-  // 1. Clean existing records in reverse dependency order for idempotency
-  await prisma.reservation.deleteMany();
-  await prisma.resource.deleteMany();
-  await prisma.resourceCategory.deleteMany();
-  await prisma.user.deleteMany();
-
-  console.log("🧹 Cleaned existing records.");
-
-  // 2. Seed Users (Demo users for MVP assessment, clearly documented)
-  const alexAdmin = await prisma.user.create({
-    data: {
-      name: "Alex Vance",
-      email: "alex.admin@primewave.local",
-      role: UserRole.ADMIN,
-    },
-  });
-
-  const sarahMember = await prisma.user.create({
-    data: {
-      name: "Sarah Chen",
-      email: "sarah.chen@primewave.local",
-      role: UserRole.MEMBER,
-    },
-  });
-
-  const davidMember = await prisma.user.create({
-    data: {
-      name: "David Kim",
-      email: "david.kim@primewave.local",
-      role: UserRole.MEMBER,
-    },
-  });
-
-  const emilyMember = await prisma.user.create({
-    data: {
-      name: "Emily Watson",
-      email: "emily.watson@primewave.local",
-      role: UserRole.MEMBER,
-    },
-  });
+  const adminPassword = process.env.SLOTIFY_DEMO_ADMIN_PASSWORD;
+  const memberPassword = process.env.SLOTIFY_DEMO_MEMBER_PASSWORD;
+  if (!adminPassword || !memberPassword || adminPassword.length < 12 || memberPassword.length < 12) {
+    throw new Error("Set SLOTIFY_DEMO_ADMIN_PASSWORD and SLOTIFY_DEMO_MEMBER_PASSWORD (12+ characters) before seeding.");
+  }
+  const adminHash = await hash(adminPassword);
+  const memberHash = await hash(memberPassword);
+  const upsertDemoUser = (name: string, email: string, role: UserRole, passwordHash: string) =>
+    prisma.user.upsert({
+      where: { email },
+      create: { name, email, role, passwordHash },
+      update: { passwordHash },
+    });
+  const alexAdmin = await upsertDemoUser("Alex Vance", "alex.admin@primewave.local", UserRole.ADMIN, adminHash);
+  const sarahMember = await upsertDemoUser("Sarah Chen", "sarah.chen@primewave.local", UserRole.MEMBER, memberHash);
+  const davidMember = await upsertDemoUser("David Kim", "david.kim@primewave.local", UserRole.MEMBER, memberHash);
+  const emilyMember = await upsertDemoUser("Emily Watson", "emily.watson@primewave.local", UserRole.MEMBER, memberHash);
 
   console.log(`👤 Seeded 4 users (1 Admin, 3 Members).`);
 
   // 3. Seed Resource Categories
-  const catMeetingRooms = await prisma.resourceCategory.create({
-    data: {
+  const catMeetingRooms = await prisma.resourceCategory.upsert({
+    where: { name: "Meeting Rooms" },
+    update: {},
+    create: {
       name: "Meeting Rooms",
       description: "Collaborative team spaces equipped with audio-visual setups.",
     },
   });
 
-  const catWorkstations = await prisma.resourceCategory.create({
-    data: {
+  const catWorkstations = await prisma.resourceCategory.upsert({
+    where: { name: "Workstations & Pods" },
+    update: {},
+    create: {
       name: "Workstations & Pods",
       description: "Dedicated quiet focus desks and individual developer pods.",
     },
   });
 
-  const catLabEquipment = await prisma.resourceCategory.create({
-    data: {
+  const catLabEquipment = await prisma.resourceCategory.upsert({
+    where: { name: "Lab & Hardware Equipment" },
+    update: {},
+    create: {
       name: "Lab & Hardware Equipment",
       description: "High-performance testing hardware, oscilloscopes, and GPU clusters.",
     },
@@ -72,8 +56,13 @@ async function main() {
 
   console.log(`📁 Seeded 3 resource categories.`);
 
+  const seedResource = async (args: Parameters<typeof prisma.resource.create>[0]) => {
+    const name = args.data.name as string;
+    return (await prisma.resource.findFirst({ where: { name } })) ?? prisma.resource.create(args);
+  };
+
   // 4. Seed Resources
-  const boardroom = await prisma.resource.create({
+  const boardroom = await seedResource({
     data: {
       name: "Grand Horizon Boardroom (A-101)",
       description: "Executive conference room with 4K telepresence display and whiteboards.",
@@ -84,7 +73,7 @@ async function main() {
     },
   });
 
-  const focusRoom = await prisma.resource.create({
+  const focusRoom = await seedResource({
     data: {
       name: "Innovation Pod Alpha",
       description: "Acoustic focus booth for 1-on-1 sprint reviews or client calls.",
@@ -95,7 +84,7 @@ async function main() {
     },
   });
 
-  const devDesk = await prisma.resource.create({
+  const devDesk = await seedResource({
     data: {
       name: "Dual-Monitor Standing Desk #12",
       description: "Ergonomic motorized standing desk with dual 27-inch 4K USB-C monitors.",
@@ -106,7 +95,7 @@ async function main() {
     },
   });
 
-  const gpuServer = await prisma.resource.create({
+  const gpuServer = await seedResource({
     data: {
       name: "AI Training Rig — H100 Node 01",
       description: "Dedicated 8x NVIDIA H100 SXM5 server node for model fine-tuning.",
@@ -117,7 +106,7 @@ async function main() {
     },
   });
 
-  const vrStation = await prisma.resource.create({
+  const vrStation = await seedResource({
     data: {
       name: "Spatial Testing Rig (Vision Pro Lab)",
       description: "Dedicated spatial computing test station with tracking grid.",
@@ -130,45 +119,34 @@ async function main() {
 
   console.log(`🏢 Seeded 5 resources.`);
 
-  // 5. Seed Sample Reservations (Relative to today's date for relevant demonstration)
-  const now = new Date();
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  // Seed sample times in the Sri Lanka business timezone; Date values remain UTC instants.
+  const parts = Object.fromEntries(new Intl.DateTimeFormat("en-US", {
+    timeZone: "Asia/Colombo", year: "numeric", month: "2-digit", day: "2-digit",
+  }).formatToParts(new Date()).map((part) => [part.type, part.value]));
+  const businessDay = `${parts.year}-${parts.month}-${parts.day}`;
+  const colomboTime = (dayOffset: number, hour: number, minute = 0) => {
+    const day = new Date(`${businessDay}T00:00:00Z`);
+    day.setUTCDate(day.getUTCDate() + dayOffset);
+    const date = day.toISOString().slice(0, 10);
+    return new Date(`${date}T${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}:00+05:30`);
+  };
+  const res1Start = colomboTime(0, 9);
+  const res1End = colomboTime(0, 10, 30);
+  const res2Start = colomboTime(0, 11);
+  const res2End = colomboTime(0, 12);
+  const res3Start = colomboTime(0, 14);
+  const res3End = colomboTime(0, 15, 30);
+  const res4Start = colomboTime(1, 10);
+  const res4End = colomboTime(1, 18);
 
-  // Meeting 1: Today 09:00 - 10:30
-  const res1Start = new Date(today);
-  res1Start.setHours(9, 0, 0, 0);
-  const res1End = new Date(today);
-  res1End.setHours(10, 30, 0, 0);
-
-  // Meeting 2: Today 11:00 - 12:00 (Adjacent/Non-overlapping on same room)
-  const res2Start = new Date(today);
-  res2Start.setHours(11, 0, 0, 0);
-  const res2End = new Date(today);
-  res2End.setHours(12, 0, 0, 0);
-
-  // Focus Pod: Today 14:00 - 15:30
-  const res3Start = new Date(today);
-  res3Start.setHours(14, 0, 0, 0);
-  const res3End = new Date(today);
-  res3End.setHours(15, 30, 0, 0);
-
-  // GPU Node: Tomorrow 10:00 - 18:00
-  const tomorrow = new Date(today);
-  tomorrow.setDate(tomorrow.getDate() + 1);
-  const res4Start = new Date(tomorrow);
-  res4Start.setHours(10, 0, 0, 0);
-  const res4End = new Date(tomorrow);
-  res4End.setHours(18, 0, 0, 0);
-
-  await prisma.reservation.createMany({
-    data: [
+  const samples = [
       {
         resourceId: boardroom.id,
         userId: alexAdmin.id,
         title: "Sprint Planning & Architectural Review",
         startTime: res1Start,
         endTime: res1End,
-        status: ReservationStatus.CONFIRMED,
+        status: ReservationStatus.APPROVED,
       },
       {
         resourceId: boardroom.id,
@@ -176,7 +154,7 @@ async function main() {
         title: "Client Technical Demo",
         startTime: res2Start,
         endTime: res2End,
-        status: ReservationStatus.CONFIRMED,
+        status: ReservationStatus.APPROVED,
       },
       {
         resourceId: devDesk.id,
@@ -184,7 +162,7 @@ async function main() {
         title: "Product Design Synchronization",
         startTime: res3Start,
         endTime: res3End,
-        status: ReservationStatus.CONFIRMED,
+        status: ReservationStatus.APPROVED,
       },
       {
         resourceId: focusRoom.id,
@@ -192,7 +170,7 @@ async function main() {
         title: "Executive 1-on-1 Review",
         startTime: res3Start,
         endTime: res3End,
-        status: ReservationStatus.CONFIRMED,
+        status: ReservationStatus.APPROVED,
       },
       {
         resourceId: gpuServer.id,
@@ -200,7 +178,7 @@ async function main() {
         title: "LLM Batch Inference Benchmarks",
         startTime: res4Start,
         endTime: res4End,
-        status: ReservationStatus.CONFIRMED,
+        status: ReservationStatus.APPROVED,
       },
       {
         resourceId: vrStation.id,
@@ -208,12 +186,16 @@ async function main() {
         title: "Spatial UI Usability Testing",
         startTime: res4Start,
         endTime: res4End,
-        status: ReservationStatus.CONFIRMED,
+        status: ReservationStatus.APPROVED,
       },
-    ],
-  });
+  ];
+  for (const sample of samples) {
+    if (!(await prisma.reservation.findFirst({ where: { title: sample.title } }))) {
+      await prisma.reservation.create({ data: sample });
+    }
+  }
 
-  console.log(`📅 Seeded 5 sample reservations.`);
+  console.log(`📅 Sample reservations present.`);
   console.log("✅ Seeding completed successfully!");
 }
 

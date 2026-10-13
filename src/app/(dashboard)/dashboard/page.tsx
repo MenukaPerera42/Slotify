@@ -7,6 +7,7 @@ import {
   ArrowRight,
 } from "lucide-react";
 import { prisma } from "@/lib/prisma";
+import { requireUser } from "@/lib/authorization";
 import { AppHeader } from "@/components/layout/app-header";
 import { Card, CardHeader, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -14,12 +15,13 @@ import { Button } from "@/components/ui/button";
 export const dynamic = "force-dynamic";
 
 export default async function DashboardPage() {
+  const user = await requireUser();
   const [totalResources, activeResources, totalCategories, totalReservations] =
     await Promise.all([
       prisma.resource.count(),
       prisma.resource.count({ where: { isActive: true } }),
       prisma.resourceCategory.count(),
-      prisma.reservation.count({ where: { status: "CONFIRMED" } }),
+      prisma.reservation.count({ where: { status: { in: ["PENDING", "APPROVED"] }, ...(user.role === "ADMIN" ? {} : { userId: user.id }) } }),
     ]);
 
   const recentResources = await prisma.resource.findMany({
@@ -37,7 +39,7 @@ export default async function DashboardPage() {
           <Link href="/resources">
             <Button size="sm" className="flex items-center gap-1.5 shadow-xs">
               <Layers className="h-4 w-4" />
-              <span>Manage Resources</span>
+              <span>Browse Resources</span>
             </Button>
           </Link>
         }
@@ -98,7 +100,7 @@ export default async function DashboardPage() {
                 {totalReservations}
               </div>
               <p className="text-xs text-slate-500 mt-1">
-                Confirmed reservations
+                Pending and approved reservations
               </p>
             </CardContent>
           </Card>

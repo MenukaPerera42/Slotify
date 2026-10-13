@@ -21,9 +21,10 @@ import type { ResourceItem } from "./resource-card";
 interface AvailabilityCardProps {
   resource: ResourceItem;
   categories: { id: string; name: string }[];
+  canManage?: boolean;
 }
 
-export function AvailabilityCard({ resource, categories }: AvailabilityCardProps) {
+export function AvailabilityCard({ resource, categories, canManage = false }: AvailabilityCardProps) {
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
 
@@ -95,7 +96,7 @@ export function AvailabilityCard({ resource, categories }: AvailabilityCardProps
               </Button>
             </Link>
 
-            <Button
+            {canManage && <Button
               variant="ghost"
               size="sm"
               onClick={handleToggleStatus}
@@ -108,9 +109,9 @@ export function AvailabilityCard({ resource, categories }: AvailabilityCardProps
                   resource.isActive ? "text-amber-600" : "text-emerald-600"
                 }`}
               />
-            </Button>
+            </Button>}
 
-            <Button
+            {canManage && <Button
               variant="ghost"
               size="sm"
               onClick={() => setIsEditOpen(true)}
@@ -118,7 +119,7 @@ export function AvailabilityCard({ resource, categories }: AvailabilityCardProps
             >
               <Pencil className="h-3.5 w-3.5 mr-1" />
               <span>Edit</span>
-            </Button>
+            </Button>}
 
             <Link href="/reservations">
               <Button
@@ -154,12 +155,12 @@ export function AvailabilityCard({ resource, categories }: AvailabilityCardProps
         </div>
       </div>
 
-      <ResourceFormModal
+      {canManage && <ResourceFormModal
         isOpen={isEditOpen}
         onClose={() => setIsEditOpen(false)}
         categories={categories}
         resource={resource}
-      />
+      />}
     </>
   );
 }

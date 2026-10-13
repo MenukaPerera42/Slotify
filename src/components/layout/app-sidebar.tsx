@@ -11,11 +11,13 @@ import {
   Shield,
   Zap,
   Bell,
+  LogOut,
 } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
+import { logoutAction } from "@/features/auth/actions";
 
-const navigationItems = [
+const baseNavigationItems = [
   {
     name: "Dashboard",
     href: "/dashboard",
@@ -26,16 +28,16 @@ const navigationItems = [
     href: "/resources",
     icon: Layers,
   },
-  {
-    name: "Reservations",
-    href: "/reservations",
-    icon: CalendarDays,
-  },
 ];
 
-export function AppSidebar() {
+export function AppSidebar({ user }: { user: { name: string; email: string; role: "ADMIN" | "MEMBER" } }) {
   const pathname = usePathname();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const navigationItems = [
+    ...baseNavigationItems,
+    { name: user.role === "ADMIN" ? "Reservations" : "My Reservations", href: "/reservations", icon: CalendarDays },
+    ...(user.role === "ADMIN" ? [{ name: "Administration", href: "/administration", icon: Shield }] : []),
+  ];
 
   return (
     <>
@@ -148,7 +150,7 @@ export function AppSidebar() {
                 <span>Notifications</span>
               </div>
               <span className="h-4 min-w-4 px-1 rounded-full bg-rose-500 text-white text-[10px] font-bold flex items-center justify-center">
-                3
+                0
               </span>
             </div>
           </div>
@@ -158,17 +160,20 @@ export function AppSidebar() {
         <div className="p-3 px-4 border-t border-slate-100">
           <div className="flex items-center gap-2.5">
             <div className="h-8 w-8 rounded-full bg-slate-200 border border-slate-300 flex items-center justify-center text-slate-700 font-semibold text-xs shrink-0">
-              AV
+              {user.name.split(" ").map((part) => part[0]).slice(0, 2).join("").toUpperCase()}
             </div>
             <div className="flex flex-col min-w-0">
               <span className="text-xs font-semibold text-slate-800 truncate">
-                Alex Vance
+                {user.name}
               </span>
               <span className="text-[10px] text-slate-400 flex items-center gap-1">
-                <Shield className="h-2.5 w-2.5 text-blue-500" /> Demo Admin
+                <Shield className="h-2.5 w-2.5 text-blue-500" /> {user.role === "ADMIN" ? "Admin" : "Member"}
               </span>
             </div>
           </div>
+          <form action={logoutAction} className="mt-3">
+            <button className="flex items-center gap-2 text-xs text-slate-500 hover:text-slate-900" title={`Sign out ${user.email}`}><LogOut className="h-3.5 w-3.5" /> Sign out</button>
+          </form>
         </div>
       </aside>
     </>
