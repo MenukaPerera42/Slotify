@@ -15,6 +15,7 @@
     "format": "prettier --write .",
     "db:seed": "node --env-file=.env --import tsx prisma/seed.ts",
     "db:seed-departments": "node --env-file=.env --import tsx prisma/seed-departments.ts",
+    "db:client:refresh": "prisma generate && prisma migrate status && node -e \"console.log('Restart the Next.js dev server to reload the generated Prisma Client.')\"",
     "db:setup-demo": "node --import tsx prisma/setup-demo-credentials.ts",
     "db:reset-demo-password": "node --env-file=.env --import tsx prisma/reset-demo-password.ts",
     "db:migrate": "prisma migrate dev"

@@ -95,7 +95,10 @@ Slotify/
 - **`npm run typecheck`**: Run static TypeScript analysis with `--noEmit`.
 - **`npm run format`**: Run Prettier code formatting.
 - **`npm run db:migrate`**: Apply Prisma migrations to the PostgreSQL database.
+- **`npm run db:client:refresh`**: Regenerate Prisma Client, report migration status, and remind you to restart Next.js. It does not apply migrations or change data.
 - **`npm run db:seed`**: Execute repeatable database seeder (`prisma/seed.ts`).
+
+After changing `prisma/schema.prisma`, stop the running Next.js dev server, apply any reviewed migration separately, run `npm run db:client:refresh`, and start `npm run dev` again. A running dev process can retain an older Prisma Client model even when the generated files on disk are current. If `PrismaClientValidationError` reports an unknown field that is present in the schema and generated Client, stop that project's Next.js process, remove its generated `.next` output, regenerate the Client, and restart. Do not remove fields from queries or reset the database to work around a stale runtime.
 
 ---
 
