@@ -3,8 +3,9 @@ import * as actions from "@/features/reservations/actions/reservation-actions";
 import * as resourceActions from "@/features/resources/actions/resource-actions";
 import * as notificationActions from "@/features/notifications/actions/notification-actions";
 import * as departmentActions from "@/features/departments/actions/department-actions";
+import * as dashboardActions from "@/features/dashboard/actions/dashboard-actions";
 
-const actionRegistry = { ...actions, ...resourceActions, ...notificationActions, ...departmentActions };
+const actionRegistry = { ...actions, ...resourceActions, ...notificationActions, ...departmentActions, ...dashboardActions };
 
 // Integration harness only. It is inert unless explicitly enabled in a local test server.
 export async function POST(request: Request) {

@@ -47,6 +47,7 @@ async function run<T>(operation: () => Promise<T>): Promise<ReservationResult<T>
 function refresh() {
   revalidatePath("/reservations");
   revalidatePath("/resources");
+  revalidatePath("/dashboard");
 }
 
 export async function createReservationAction(input: unknown) {

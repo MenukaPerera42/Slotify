@@ -368,6 +368,11 @@ export function TimelineGrid({
                               booking.reservationIds?.length ?? 1;
                             const isGrouped = count > 1;
 
+                            // Width-responsive thresholds for clean labels
+                            // 30 min = ~5.56%, 60 min = ~11.11%, 90 min = ~16.67%
+                            const isNarrow = pos.width < 12.0;
+                            const isVeryNarrow = pos.width < 6.5;
+
                             const statusLabel = isPending
                               ? "Pending Approval"
                               : "Reserved";
@@ -412,7 +417,7 @@ export function TimelineGrid({
                                   })
                                 }
                                 className={cn(
-                                  "absolute top-1.5 bottom-1.5 rounded-lg border shadow-2xs pointer-events-auto transition-all select-none overflow-hidden flex items-center px-2 py-0.5 z-10 cursor-pointer text-left hover:brightness-95 focus:outline-none focus:ring-2 focus:ring-blue-500",
+                                  "absolute top-1.5 bottom-1.5 rounded-lg border shadow-2xs pointer-events-auto transition-all select-none overflow-hidden flex items-center px-1.5 py-0.5 z-10 cursor-pointer text-left hover:brightness-95 focus:outline-none focus:ring-2 focus:ring-blue-500",
                                   isPending && "border-amber-400 border-dashed"
                                 )}
                                 style={{
@@ -426,8 +431,8 @@ export function TimelineGrid({
                                 }}
                                 title={tooltipText}
                               >
-                                <div className="flex items-center justify-between gap-1.5 w-full min-w-0">
-                                  {/* Left: Status Indicator + Department + Status / Title */}
+                                <div className="flex items-center justify-between gap-1 w-full min-w-0">
+                                  {/* Left: Status Indicator + Department Badge + Optional Title */}
                                   <div className="flex items-center gap-1.5 min-w-0 truncate">
                                     {isPending ? (
                                       <span className="h-2 w-2 rounded-full bg-amber-500 ring-2 ring-amber-300 animate-pulse shrink-0" />
@@ -435,29 +440,35 @@ export function TimelineGrid({
                                       <span className="h-2 w-2 rounded-full bg-emerald-500 shrink-0" />
                                     )}
 
-                                    {/* Department Badge */}
+                                    {/* Department Badge: compact code in narrow blocks */}
                                     <span
-                                      className="text-[9px] font-bold px-1.5 py-0.2 rounded shrink-0 shadow-2xs border"
+                                      className="text-[9px] font-bold px-1.5 py-0.2 rounded shrink-0 shadow-2xs border tracking-tight"
                                       style={{
                                         backgroundColor: colorScheme.badgeBg,
                                         borderColor: colorScheme.badgeBorder,
                                         color: colorScheme.badgeText,
                                       }}
                                     >
-                                      {isLegacy
+                                      {isNarrow
+                                        ? isLegacy
+                                          ? "N/A"
+                                          : (dept?.code || colorScheme.code || "DEP").slice(0, 4)
+                                        : isLegacy
                                         ? "Unassigned"
                                         : dept?.code || colorScheme.code}
                                     </span>
 
-                                    {/* Status / Title */}
-                                    <span className="text-[10px] font-bold truncate">
-                                      {isAdmin && booking.title
-                                        ? booking.title
-                                        : statusLabel}
-                                    </span>
+                                    {/* Status / Title: hidden in very narrow (<6.5%) blocks */}
+                                    {!isVeryNarrow && (
+                                      <span className="text-[10px] font-bold truncate">
+                                        {isAdmin && booking.title
+                                          ? booking.title
+                                          : statusLabel}
+                                      </span>
+                                    )}
                                   </div>
 
-                                  {/* Right: Time Interval + Group Badge */}
+                                  {/* Right: Group Badge + Time Interval (Interval hidden in narrow blocks) */}
                                   <div className="flex items-center gap-1 shrink-0 text-[9px] font-semibold opacity-90">
                                     {isGrouped && (
                                       <span className="inline-flex items-center gap-0.5 px-1 py-0.2 rounded bg-white/90 text-slate-800 text-[8px] font-bold border border-slate-200 shadow-2xs">
@@ -465,9 +476,11 @@ export function TimelineGrid({
                                         {count}
                                       </span>
                                     )}
-                                    <span className="hidden sm:inline truncate">
-                                      {intervalStr}
-                                    </span>
+                                    {!isNarrow && (
+                                      <span className="hidden sm:inline truncate">
+                                        {intervalStr}
+                                      </span>
+                                    )}
                                   </div>
                                 </div>
                               </button>

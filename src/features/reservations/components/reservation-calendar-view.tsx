@@ -30,6 +30,7 @@ interface ReservationCalendarViewProps {
   isAdmin?: boolean;
   initialDate?: string;
   onBookResource?: (resourceId: string, date: string, startTime: string) => void;
+  onRefreshSummary?: () => void;
 }
 
 export function ReservationCalendarView({
@@ -38,6 +39,7 @@ export function ReservationCalendarView({
   departments = [],
   isAdmin = false,
   initialDate,
+  onRefreshSummary,
 }: ReservationCalendarViewProps) {
   const router = useRouter();
   const [selectedDate, setSelectedDate] = useState(
@@ -373,6 +375,7 @@ export function ReservationCalendarView({
         isAdmin={isAdmin}
         onSuccess={() => {
           fetchDateReservations(selectedDate);
+          onRefreshSummary?.();
           router.refresh();
         }}
       />

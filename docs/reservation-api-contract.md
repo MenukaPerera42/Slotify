@@ -1,5 +1,7 @@
 # Reservation backend contract (Stage 6A)
 
+For the all-time Reservations summary cards and the Stage 6C Dashboard analytics actions, see [dashboard-api-contract.md](dashboard-api-contract.md). The card counts come from `getReservationSummaryAction()` rather than the page's capped booking list.
+
 Import Server Actions from `@/features/reservations/actions/reservation-actions`. Every action returns `Promise<ReservationResult<T>>`: `{ success: true, data }` or `{ success: false, code, error, fieldErrors? }`. Dates returned from the server are JavaScript `Date` values in React Server Actions; serialize them to ISO strings when using another transport. Inputs use ISO 8601 timestamps **with `Z` or a numeric offset**, for example `2026-10-15T09:00:00+05:30`. The server stores instants in PostgreSQL `timestamptz`.
 
 All actions require an active Auth.js session. Authorization state is reloaded from PostgreSQL for each operation. Client supplied actor ID and role are never accepted. Self booking rejects `userId`, `departmentId`, and `status`; owner and department come from the current database user. MEMBER self booking is `PENDING`; ADMIN self booking is `APPROVED`. The dedicated admin action selects an active department and optionally a target user.

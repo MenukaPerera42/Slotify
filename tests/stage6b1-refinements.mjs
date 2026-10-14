@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { PrismaClient } from "@prisma/client";
-import { getDepartmentColorScheme, DEPARTMENT_PALETTES, UNASSIGNED_PALETTE } from "../src/features/departments/utils/department-colors.ts";
+import { getDepartmentColorScheme } from "../src/features/departments/utils/department-colors.ts";
 
 const prisma = new PrismaClient();
 const base = process.env.SLOTIFY_TEST_URL ?? "http://localhost:3000";

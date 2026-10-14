@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import {
   Calendar as CalendarIcon,
@@ -17,6 +17,7 @@ import { ReservationFormModal, type ResourceOption } from "./reservation-form-mo
 import { ReservationCalendarView } from "./reservation-calendar-view";
 import { AdminApprovalQueue, type PendingReservationItem } from "./admin-approval-queue";
 import { ReservationList, type ReservationItem } from "./reservation-list";
+import { getReservationSummaryAction } from "@/features/dashboard/actions/dashboard-actions";
 
 interface ReservationsClientProps {
   user: {
@@ -30,6 +31,7 @@ interface ReservationsClientProps {
   departments?: { id: string; name: string; code: string }[];
   reservations: ReservationItem[];
   pendingReservations: PendingReservationItem[];
+  summary: { totalBookings: number; pendingReview: number; approvedBookings: number; activeResources: number };
 }
 
 export function ReservationsClient({
@@ -39,10 +41,26 @@ export function ReservationsClient({
   departments = [],
   reservations,
   pendingReservations,
+  summary,
 }: ReservationsClientProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const isAdmin = user.role === "ADMIN";
+
+  // Real-time all-time metrics state
+  const [clientSummary, setClientSummary] = useState<typeof summary | null>(null);
+  const summaryData = clientSummary ?? summary;
+
+  const refreshSummary = useCallback(async () => {
+    try {
+      const res = await getReservationSummaryAction();
+      if (res.success && res.data) {
+        setClientSummary(res.data);
+      }
+    } catch (err) {
+      console.error("Failed to refresh summary metrics:", err);
+    }
+  }, []);
 
   // Active tab state
   const queryTab = searchParams.get("tab");
@@ -69,11 +87,11 @@ export function ReservationsClient({
     router.replace(`/reservations?${params.toString()}`);
   };
 
-  // Metrics calculation
-  const totalCount = reservations.length;
-  const pendingCount = pendingReservations.length;
-  const approvedCount = reservations.filter((r) => r.status === "APPROVED").length;
-  const activeResourcesCount = resources.filter((r) => r.isActive !== false).length;
+  // All-time metrics come from PostgreSQL, independent of paginated lists and calendar dates.
+  const totalCount = summaryData.totalBookings;
+  const pendingCount = summaryData.pendingReview;
+  const approvedCount = summaryData.approvedBookings;
+  const activeResourcesCount = summaryData.activeResources;
 
   return (
     <div className="space-y-6">
@@ -194,6 +212,7 @@ export function ReservationsClient({
           categories={categories}
           departments={departments}
           isAdmin={isAdmin}
+          onRefreshSummary={refreshSummary}
         />
       )}
 
@@ -216,7 +235,10 @@ export function ReservationsClient({
           <AdminApprovalQueue
             key={pendingReservations.map((item) => `${item.id}:${item.status}`).join("|")}
             initialItems={pendingReservations}
-            onActionComplete={() => router.refresh()}
+            onActionComplete={() => {
+              refreshSummary();
+              router.refresh();
+            }}
           />
         </div>
       )}
@@ -239,7 +261,10 @@ export function ReservationsClient({
             initialItems={reservations}
             isAdmin={isAdmin}
             currentUserId={user.id}
-            onRefresh={() => router.refresh()}
+            onRefresh={() => {
+              refreshSummary();
+              router.refresh();
+            }}
           />
         </div>
       )}
@@ -259,6 +284,7 @@ export function ReservationsClient({
             }
           }}
           onSuccess={() => {
+            refreshSummary();
             router.refresh();
           }}
           resources={resources}

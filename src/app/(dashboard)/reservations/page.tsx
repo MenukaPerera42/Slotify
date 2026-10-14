@@ -5,6 +5,7 @@ import { getResources, getCategories } from "@/features/resources/services/resou
 import { reservationListSchema } from "@/features/reservations/schemas/reservation-schema";
 import { ReservationsClient } from "@/features/reservations/components/reservations-client";
 import { publicActiveDepartments } from "@/features/departments/services/department-service";
+import { reservationSummary } from "@/features/dashboard/services/dashboard-analytics-service";
 import { Loader2 } from "lucide-react";
 
 export const metadata = {
@@ -17,6 +18,7 @@ export default async function ReservationsPage() {
   const categories = await getCategories();
   const rawResources = await getResources();
   const departments = await publicActiveDepartments();
+  const summary = await reservationSummary();
 
   // Map resources to expected shape
   const resources = rawResources.map((r) => ({
@@ -89,6 +91,7 @@ export default async function ReservationsPage() {
             departments={departments}
             reservations={rawReservations}
             pendingReservations={rawPending}
+            summary={summary}
           />
         </Suspense>
       </main>
