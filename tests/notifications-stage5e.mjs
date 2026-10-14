@@ -100,6 +100,7 @@ function slot(hoursFromNow, minutes = 60) {
 try {
   initialNotificationCount = await prisma.notification.count();
   initialReservationCount = await prisma.reservation.count();
+  const departmentId = (await prisma.department.findUniqueOrThrow({ where: { code: "ENG" } })).id;
 
   // Create isolated test category and resource
   categoryId = (
@@ -129,7 +130,7 @@ try {
     const email = `${name}-${tag}@stage5e.local`;
     const passwordHash = await hash(passphrase);
     const created = await prisma.user.create({
-      data: { name: `User ${name}`, email, role, passwordHash, isActive: true },
+      data: { name: `User ${name}`, email, role, passwordHash, isActive: true, departmentId },
     });
     userIds.push(created.id);
     users[name] = {

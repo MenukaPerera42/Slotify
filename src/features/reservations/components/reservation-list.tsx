@@ -34,7 +34,9 @@ export interface ReservationItem {
   status: "PENDING" | "APPROVED" | "REJECTED" | "CANCELLED";
   createdAt: Date | string;
   resourceId: string;
-  userId: string;
+  userId: string | null;
+  departmentId?: string | null;
+  department?: { name: string; code: string } | null;
   resource: {
     name: string;
     categoryId?: string;
@@ -42,7 +44,7 @@ export interface ReservationItem {
   user: {
     name: string;
     email?: string;
-  };
+  } | null;
 }
 
 interface ReservationListProps {
@@ -78,7 +80,7 @@ export function ReservationList({
       const q = searchQuery.toLowerCase();
       const matchTitle = item.title.toLowerCase().includes(q);
       const matchResource = item.resource.name.toLowerCase().includes(q);
-      const matchUser = item.user.name.toLowerCase().includes(q);
+      const matchUser = (item.user?.name ?? item.department?.name ?? "").toLowerCase().includes(q);
       if (!matchTitle && !matchResource && !matchUser) return false;
     }
     return true;
@@ -268,7 +270,7 @@ export function ReservationList({
           {filteredItems.map((item) => {
             const canCancel =
               (item.status === "PENDING" || item.status === "APPROVED") &&
-              (isAdmin || !currentUserId || item.userId === currentUserId);
+              (isAdmin || item.userId === currentUserId);
 
             return (
               <div
@@ -311,6 +313,9 @@ export function ReservationList({
                         <span>({item.user.email})</span>
                       )}
                     </div>
+                  )}
+                  {isAdmin && !item.user && item.department && (
+                    <div className="text-[11px] text-slate-500 pt-0.5">{item.department.name} department booking</div>
                   )}
                 </div>
 

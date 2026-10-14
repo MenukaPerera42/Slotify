@@ -13,6 +13,7 @@
     "test:notifications": "node --env-file=.env tests/notifications-stage5e.mjs",
     "format": "prettier --write .",
     "db:seed": "node --env-file=.env --import tsx prisma/seed.ts",
+    "db:seed-departments": "node --env-file=.env --import tsx prisma/seed-departments.ts",
     "db:setup-demo": "node --import tsx prisma/setup-demo-credentials.ts",
     "db:reset-demo-password": "node --env-file=.env --import tsx prisma/reset-demo-password.ts",
     "db:migrate": "prisma migrate dev"

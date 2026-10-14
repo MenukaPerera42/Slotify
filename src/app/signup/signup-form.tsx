@@ -6,7 +6,7 @@ import { signupAction, type SignupState } from "./actions";
 
 const initialState: SignupState = {};
 
-export function SignupForm() {
+export function SignupForm({ departments }: { departments: { id: string; name: string; code: string }[] }) {
   const [state, action, pending] = useActionState(signupAction, initialState);
   return <form action={action} className="space-y-4">
     <label htmlFor="signup-name" className="block text-sm font-medium text-slate-700">Full Name</label>
@@ -16,6 +16,13 @@ export function SignupForm() {
     <label htmlFor="signup-email" className="block text-sm font-medium text-slate-700">Email Address</label>
     <input id="signup-email" name="email" type="email" autoComplete="email" required maxLength={254} aria-describedby={state.fieldErrors?.email ? "signup-email-error" : undefined} className="-mt-2 block w-full rounded-lg border border-slate-300 px-3 py-2.5 outline-none focus:border-blue-600" />
     {state.fieldErrors?.email && <p id="signup-email-error" className="text-xs text-rose-600">Enter a valid email address.</p>}
+
+    <label htmlFor="signup-department" className="block text-sm font-medium text-slate-700">Department</label>
+    <select id="signup-department" name="departmentId" required defaultValue="" aria-describedby={state.fieldErrors?.departmentId ? "signup-department-error" : undefined} className="-mt-2 block w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 outline-none focus:border-blue-600">
+      <option value="" disabled>Choose a department</option>
+      {departments.map((department) => <option key={department.id} value={department.id}>{department.name} ({department.code})</option>)}
+    </select>
+    {state.fieldErrors?.departmentId && <p id="signup-department-error" className="text-xs text-rose-600">{state.fieldErrors.departmentId[0]}</p>}
 
     <label htmlFor="signup-password" className="block text-sm font-medium text-slate-700">Password</label>
     <input id="signup-password" name="password" type="password" autoComplete="new-password" required minLength={6} maxLength={128} aria-describedby="signup-password-help" className="-mt-2 block w-full rounded-lg border border-slate-300 px-3 py-2.5 outline-none focus:border-blue-600" />

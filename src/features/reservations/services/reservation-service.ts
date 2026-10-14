@@ -7,13 +7,15 @@ import { businessDayBounds } from "../utils/business-date";
 import { ReservationError } from "../types";
 import { activeUserListSchema, reservationListSchema, type AvailabilityInput, type CreateAdminReservationInput, type CreateReservationInput, type DailyInput } from "../schemas/reservation-schema";
 import { createNotificationsTx } from "@/features/notifications/services/notification-service";
+import { groupAdjacentReservations } from "../utils/group-adjacent";
 
 const blocking: ReservationStatus[] = ["PENDING", "APPROVED"];
 const reservationSelect = {
-  id: true, resourceId: true, userId: true, createdByUserId: true, title: true, startTime: true,
+  id: true, resourceId: true, userId: true, departmentId: true, createdByUserId: true, title: true, startTime: true,
   endTime: true, status: true, createdAt: true, updatedAt: true,
   resource: { select: { name: true, categoryId: true } },
   user: { select: { name: true, email: true } },
+  department: { select: { name: true, code: true } },
 } satisfies Prisma.ReservationSelect;
 
 async function actor() {
@@ -34,10 +36,10 @@ function overlap(start: Date, end: Date): Prisma.ReservationWhereInput {
 
 async function insertReservation(
   input: CreateReservationInput,
-  ownerId: string,
+  ownerId: string | null,
+  departmentId: string,
   creator: { id: string; name: string },
   status: "PENDING" | "APPROVED",
-  verifyTarget: boolean
 ) {
   const startTime = new Date(input.startTime);
   const endTime = new Date(input.endTime);
@@ -49,14 +51,20 @@ async function insertReservation(
     const resource = rows[0];
     if (!resource) throw new ReservationError("RESOURCE_NOT_FOUND", "Resource not found.");
     if (!resource.isActive) throw new ReservationError("RESOURCE_INACTIVE", "This resource is inactive.");
-    if (verifyTarget) {
-      const users = await tx.$queryRaw<Array<{ id: string; isActive: boolean }>>`
-        SELECT id, "isActive" FROM users WHERE id = ${ownerId}::uuid FOR SHARE`;
-      if (!users[0]?.isActive) throw new ReservationError("USER_NOT_FOUND", "Active target user not found.");
+    const departments = await tx.$queryRaw<Array<{ id: string; isActive: boolean }>>`
+      SELECT id, "isActive" FROM departments WHERE id = ${departmentId}::uuid FOR SHARE`;
+    if (!departments[0]) throw new ReservationError("DEPARTMENT_NOT_FOUND", "Department not found.");
+    if (!departments[0].isActive) throw new ReservationError("DEPARTMENT_INACTIVE", "Department is inactive.");
+    if (ownerId) {
+      const users = await tx.$queryRaw<Array<{ id: string; isActive: boolean; departmentId: string | null }>>`
+        SELECT id, "isActive", "departmentId" FROM users WHERE id = ${ownerId}::uuid FOR SHARE`;
+      if (!users[0]) throw new ReservationError("USER_NOT_FOUND", "Target user not found.");
+      if (!users[0].isActive) throw new ReservationError("USER_INACTIVE", "Target user is inactive.");
+      if (users[0].departmentId !== departmentId) throw new ReservationError("DEPARTMENT_MISMATCH", "Target user belongs to a different department.");
     }
     // The GiST exclusion constraint is the final overlap authority.
     const created = await tx.reservation.create({
-      data: { resourceId: input.resourceId, userId: ownerId, createdByUserId: creator.id, title: input.title, startTime, endTime, status },
+      data: { resourceId: input.resourceId, userId: ownerId, departmentId, createdByUserId: creator.id, title: input.title, startTime, endTime, status },
       select: reservationSelect,
     });
 
@@ -79,7 +87,7 @@ async function insertReservation(
           }))
         );
       }
-    } else if (status === "APPROVED" && ownerId !== creator.id) {
+    } else if (status === "APPROVED" && ownerId && ownerId !== creator.id) {
       await createNotificationsTx(tx, [
         {
           recipientUserId: ownerId,
@@ -98,22 +106,24 @@ async function insertReservation(
 
 export async function createReservation(input: CreateReservationInput) {
   const user = await actor();
-  return insertReservation(input, user.id, user, "PENDING", false);
+  if (!user.departmentId) throw new ReservationError("DEPARTMENT_REQUIRED", "A department assignment is required before booking.");
+  return insertReservation(input, user.id, user.departmentId, user, user.role === "ADMIN" ? "APPROVED" : "PENDING");
 }
 
 export async function createAdminReservation(input: CreateAdminReservationInput) {
   const user = await admin();
-  return insertReservation(input, input.targetUserId, user, "APPROVED", true);
+  return insertReservation(input, input.targetUserId ?? null, input.departmentId, user, "APPROVED");
 }
 
 export async function listActiveUsers(input: z.output<typeof activeUserListSchema>) {
   await admin();
   const where: Prisma.UserWhereInput = {
     isActive: true,
+    ...(input.departmentId ? { departmentId: input.departmentId } : {}),
     ...(input.search ? { OR: [{ name: { contains: input.search, mode: "insensitive" } }, { email: { contains: input.search, mode: "insensitive" } }] } : {}),
   };
   const [items, total] = await prisma.$transaction([
-    prisma.user.findMany({ where, select: { id: true, name: true, email: true, role: true }, orderBy: [{ name: "asc" }, { id: "asc" }], skip: (input.page - 1) * input.pageSize, take: input.pageSize }),
+    prisma.user.findMany({ where, select: { id: true, name: true, email: true, role: true, departmentId: true }, orderBy: [{ name: "asc" }, { id: "asc" }], skip: (input.page - 1) * input.pageSize, take: input.pageSize }),
     prisma.user.count({ where }),
   ]);
   return { items, total, page: input.page, pageSize: input.pageSize };
@@ -125,6 +135,7 @@ export async function listReservations(input: z.output<typeof reservationListSch
   const where: Prisma.ReservationWhereInput = {
     ...(scope === "own" ? { userId: user.id } : input.userId ? { userId: input.userId } : {}),
     ...(input.resourceId ? { resourceId: input.resourceId } : {}),
+    ...(input.departmentId ? { departmentId: input.departmentId } : {}),
     ...(input.status ? { status: input.status } : {}),
     ...(input.from ? { endTime: { gt: new Date(input.from) } } : {}),
     ...(input.to ? { startTime: { lt: new Date(input.to) } } : {}),
@@ -165,7 +176,7 @@ async function transition(id: string, status: "APPROVED" | "REJECTED" | "CANCELL
     const updated = await tx.reservation.findUniqueOrThrow({ where: { id }, select: reservationSelect });
 
     if (status === "APPROVED") {
-      if (updated.userId !== user.id) {
+      if (updated.userId && updated.userId !== user.id) {
         await createNotificationsTx(tx, [
           {
             recipientUserId: updated.userId,
@@ -178,7 +189,7 @@ async function transition(id: string, status: "APPROVED" | "REJECTED" | "CANCELL
         ]);
       }
     } else if (status === "REJECTED") {
-      if (updated.userId !== user.id) {
+      if (updated.userId && updated.userId !== user.id) {
         await createNotificationsTx(tx, [
           {
             recipientUserId: updated.userId,
@@ -191,7 +202,7 @@ async function transition(id: string, status: "APPROVED" | "REJECTED" | "CANCELL
         ]);
       }
     } else if (status === "CANCELLED") {
-      if (updated.userId !== user.id) {
+      if (updated.userId && updated.userId !== user.id) {
         // Admin cancelled someone else's reservation
         await createNotificationsTx(tx, [
           {
@@ -203,7 +214,7 @@ async function transition(id: string, status: "APPROVED" | "REJECTED" | "CANCELL
             message: `Your reservation for "${updated.title}" was cancelled by an administrator.`,
           },
         ]);
-      } else {
+      } else if (updated.userId === user.id) {
         // Owner cancelled their own reservation -> notify active admins (excluding owner)
         const admins = await tx.user.findMany({
           where: { role: "ADMIN", isActive: true },
@@ -288,4 +299,17 @@ export async function reservationsForDate(input: DailyInput) {
   });
   // Members receive only occupancy data, without IDs or private booking details.
   return user.role === "ADMIN" ? items : items.map((item) => ({ resourceId: item.resourceId, startTime: item.startTime, endTime: item.endTime, status: item.status }));
+}
+
+export async function groupedReservationsForDate(input: DailyInput) {
+  const user = await actor();
+  const { start, end } = businessDayBounds(input.date);
+  const items = await prisma.reservation.findMany({
+    where: { ...overlap(start, end), ...(input.resourceId ? { resourceId: input.resourceId } : {}), ...(input.categoryId ? { resource: { categoryId: input.categoryId } } : {}) },
+    select: { id: true, resourceId: true, departmentId: true, status: true, startTime: true, endTime: true, title: true, userId: true },
+  });
+  const groups = groupAdjacentReservations(items);
+  if (user.role !== "ADMIN") return groups;
+  const details = new Map(items.map(({ id, title, userId }) => [id, { id, title, userId }]));
+  return groups.map((group) => ({ ...group, bookings: group.reservationIds.map((id) => details.get(id)!) }));
 }

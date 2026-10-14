@@ -33,14 +33,32 @@ model User {
   role         UserRole      @default(MEMBER)
   passwordHash String?
   isActive     Boolean       @default(true)
+  departmentId String?       @db.Uuid
   createdAt    DateTime      @default(now()) @db.Timestamptz(3)
   updatedAt    DateTime      @updatedAt @db.Timestamptz(3)
   reservations        Reservation[] @relation("ReservationOwner")
   createdReservations Reservation[] @relation("ReservationCreator")
   receivedNotifications Notification[] @relation("NotificationRecipient")
   actedNotifications    Notification[] @relation("NotificationActor")
+  department            Department? @relation(fields: [departmentId], references: [id], onDelete: Restrict)
 
+  @@index([departmentId])
   @@map("users")
+}
+
+model Department {
+  id           String        @id @default(uuid()) @db.Uuid
+  name         String        @unique
+  code         String        @unique
+  description  String?
+  isActive     Boolean       @default(true)
+  createdAt    DateTime      @default(now()) @db.Timestamptz(3)
+  updatedAt    DateTime      @updatedAt @db.Timestamptz(3)
+  users        User[]
+  reservations Reservation[]
+
+  @@index([isActive])
+  @@map("departments")
 }
 
 model AuthRateLimit {
@@ -83,7 +101,8 @@ model Resource {
 model Reservation {
   id         String            @id @default(uuid()) @db.Uuid
   resourceId String            @db.Uuid
-  userId     String            @db.Uuid
+  userId     String?           @db.Uuid
+  departmentId String?         @db.Uuid
   createdByUserId String?       @db.Uuid
   title      String
   startTime  DateTime          @db.Timestamptz(3)
@@ -92,13 +111,15 @@ model Reservation {
   createdAt  DateTime          @default(now()) @db.Timestamptz(3)
   updatedAt  DateTime          @updatedAt @db.Timestamptz(3)
   resource   Resource          @relation(fields: [resourceId], references: [id], onDelete: Restrict)
-  user       User              @relation("ReservationOwner", fields: [userId], references: [id], onDelete: Restrict)
+  user       User?             @relation("ReservationOwner", fields: [userId], references: [id], onDelete: Restrict)
+  department Department?       @relation(fields: [departmentId], references: [id], onDelete: Restrict)
   createdBy  User?             @relation("ReservationCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
   notifications Notification[]
 
   @@index([resourceId, startTime, endTime])
   @@index([userId])
   @@index([userId, startTime])
+  @@index([departmentId, startTime])
   @@index([createdByUserId])
   @@index([status])
   @@map("reservations")

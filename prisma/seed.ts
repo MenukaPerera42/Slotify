@@ -1,10 +1,12 @@
 import { PrismaClient, UserRole, ReservationStatus } from "@prisma/client";
 import { hash } from "argon2";
+import { seedDepartments } from "./departments";
 
 const prisma = new PrismaClient();
 
 async function main() {
   console.log("🌱 Starting database seeding...");
+  await seedDepartments(prisma);
 
   const adminPassword = process.env.SLOTIFY_DEMO_ADMIN_PASSWORD;
   const memberPassword = process.env.SLOTIFY_DEMO_MEMBER_PASSWORD;
@@ -201,9 +203,14 @@ async function main() {
         status: ReservationStatus.APPROVED,
       },
   ];
+  const demoDepartments = new Map((await prisma.user.findMany({
+    where: { id: { in: [alexAdmin.id, sarahMember.id, davidMember.id, emilyMember.id] } },
+    select: { id: true, departmentId: true },
+  })).map((user) => [user.id, user.departmentId]));
   for (const sample of samples) {
     if (!(await prisma.reservation.findFirst({ where: { title: sample.title } }))) {
-      await prisma.reservation.create({ data: sample });
+      const departmentId = demoDepartments.get(sample.userId);
+      if (departmentId) await prisma.reservation.create({ data: { ...sample, departmentId } });
     }
   }
 

@@ -15,7 +15,8 @@ export const createReservationSchema = z.strictObject({
   path: ["endTime"], message: "End time must be after start time",
 });
 export const createAdminReservationSchema = z.strictObject({
-  targetUserId: uuid,
+  departmentId: uuid,
+  targetUserId: uuid.optional(),
   resourceId: uuid,
   title: z.string().trim().min(1).max(120),
   startTime: instant,
@@ -25,6 +26,7 @@ export const createAdminReservationSchema = z.strictObject({
 });
 export const activeUserListSchema = z.strictObject({
   search: z.string().trim().max(100).optional(),
+  departmentId: uuid.optional(),
   page: z.number().int().min(1).max(100000).default(1),
   pageSize: z.number().int().min(1).max(100).default(50),
 });
@@ -37,6 +39,7 @@ export const reservationListSchema = z.strictObject({
   status: z.enum(["PENDING", "APPROVED", "REJECTED", "CANCELLED"]).optional(),
   resourceId: uuid.optional(),
   userId: uuid.optional(),
+  departmentId: uuid.optional(),
   from: instant.optional(),
   to: instant.optional(),
   page: z.number().int().min(1).max(100000).default(1),

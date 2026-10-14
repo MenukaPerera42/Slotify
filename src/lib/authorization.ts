@@ -8,7 +8,7 @@ export async function currentUser() {
   if (!session?.user?.email) return null;
   return prisma.user.findUnique({
     where: { email: session.user.email },
-    select: { id: true, name: true, email: true, role: true, isActive: true },
+    select: { id: true, name: true, email: true, role: true, isActive: true, departmentId: true },
   }).then((user) => user?.isActive ? user : null);
 }
 

@@ -37,7 +37,7 @@ export interface PendingReservationItem {
   user: {
     name: string;
     email?: string;
-  };
+  } | null;
 }
 
 interface AdminApprovalQueueProps {
@@ -196,9 +196,9 @@ export function AdminApprovalQueue({
                   <div className="flex items-center gap-3 text-[11px] text-slate-400 pt-1">
                     <span className="flex items-center gap-1">
                       <User className="h-3 w-3" />
-                      <span className="text-slate-700 font-medium">{item.user.name}</span>
+                      <span className="text-slate-700 font-medium">{item.user?.name ?? "Department booking"}</span>
                     </span>
-                    {item.user.email && (
+                    {item.user?.email && (
                       <span className="flex items-center gap-1">
                         <Mail className="h-3 w-3" />
                         <span>{item.user.email}</span>

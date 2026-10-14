@@ -54,11 +54,12 @@ const find = (title) => prisma.reservation.findFirstOrThrow({ where: { title, re
 
 try {
   initialReservationCount = await prisma.reservation.count();
+  const departmentId = (await prisma.department.findUniqueOrThrow({ where: { code: "ENG" } })).id;
   categoryId = (await prisma.resourceCategory.create({ data: { name: `Stage5A-${tag}` } })).id;
   resourceId = (await prisma.resource.create({ data: { name: `Stage5A Resource ${tag}`, location: "Test lab", categoryId } })).id;
   inactiveId = (await prisma.resource.create({ data: { name: `Stage5A Inactive ${tag}`, location: "Test lab", categoryId, isActive: false } })).id;
   for (const [name, role, isActive] of [["member1", "MEMBER", true], ["member2", "MEMBER", true], ["admin", "ADMIN", true], ["inactive", "MEMBER", false], ["admin2", "ADMIN", true]]) {
-    const user = await prisma.user.create({ data: { name, email: `${name}-${tag}@example.test`, role, isActive, passwordHash: await hash(passphrase) } });
+    const user = await prisma.user.create({ data: { name, email: `${name}-${tag}@example.test`, role, isActive, departmentId, passwordHash: await hash(passphrase) } });
     userIds.push(user.id);
   }
   const [member, other, admin, admin2] = await Promise.all([
@@ -141,11 +142,11 @@ try {
   pass("concurrent admin decisions: one transition succeeds");
 
   const adminSlot = slot(144);
-  fails(await action("createAdminReservationAction", [{ targetUserId: userIds[1], ...input(adminSlot) }], member), "FORBIDDEN");
-  fails(await action("createAdminReservationAction", [{ targetUserId: userIds[3], ...input(adminSlot) }], admin), "USER_NOT_FOUND");
-  fails(await action("createAdminReservationAction", [{ targetUserId: userIds[1], ...input(adminSlot, inactiveId) }], admin), "RESOURCE_INACTIVE");
-  fails(await action("createAdminReservationAction", [{ targetUserId: userIds[1], ...input({ startTime: adminSlot.endTime, endTime: adminSlot.startTime }) }], admin), "INVALID_INPUT");
-  succeeds(await action("createAdminReservationAction", [{ targetUserId: userIds[1], ...input(adminSlot, resourceId, `Admin booked ${tag}`) }], admin));
+  fails(await action("createAdminReservationAction", [{ departmentId, targetUserId: userIds[1], ...input(adminSlot) }], member), "FORBIDDEN");
+  fails(await action("createAdminReservationAction", [{ departmentId, targetUserId: userIds[3], ...input(adminSlot) }], admin), "USER_INACTIVE");
+  fails(await action("createAdminReservationAction", [{ departmentId, targetUserId: userIds[1], ...input(adminSlot, inactiveId) }], admin), "RESOURCE_INACTIVE");
+  fails(await action("createAdminReservationAction", [{ departmentId, targetUserId: userIds[1], ...input({ startTime: adminSlot.endTime, endTime: adminSlot.startTime }) }], admin), "INVALID_INPUT");
+  succeeds(await action("createAdminReservationAction", [{ departmentId, targetUserId: userIds[1], ...input(adminSlot, resourceId, `Admin booked ${tag}`) }], admin));
   const adminBooked = await find(`Admin booked ${tag}`);
   assert.equal(adminBooked.status, "APPROVED");
   assert.equal(adminBooked.userId, userIds[1]);
@@ -161,15 +162,15 @@ try {
   const mixedRace = slot(168);
   const mixedResults = await Promise.all([
     action("createReservationAction", [input(mixedRace, resourceId, `Mixed member ${tag}`)], member),
-    action("createAdminReservationAction", [{ targetUserId: userIds[1], ...input(mixedRace, resourceId, `Mixed admin ${tag}`) }], admin),
+    action("createAdminReservationAction", [{ departmentId, targetUserId: userIds[1], ...input(mixedRace, resourceId, `Mixed admin ${tag}`) }], admin),
   ]);
   assert.equal(mixedResults.filter((result) => result.includes('"success":true')).length, 1);
   assert.equal(mixedResults.filter((result) => result.includes('"code":"SLOT_CONFLICT"')).length, 1);
   assert.equal(await prisma.reservation.count({ where: { resourceId, startTime: new Date(mixedRace.startTime), status: { in: ["PENDING", "APPROVED"] } } }), 1);
   const adminRace = slot(192);
   const adminResults = await Promise.all([
-    action("createAdminReservationAction", [{ targetUserId: userIds[0], ...input(adminRace, resourceId, `Admin race A ${tag}`) }], admin),
-    action("createAdminReservationAction", [{ targetUserId: userIds[1], ...input(adminRace, resourceId, `Admin race B ${tag}`) }], admin2),
+    action("createAdminReservationAction", [{ departmentId, targetUserId: userIds[0], ...input(adminRace, resourceId, `Admin race A ${tag}`) }], admin),
+    action("createAdminReservationAction", [{ departmentId, targetUserId: userIds[1], ...input(adminRace, resourceId, `Admin race B ${tag}`) }], admin2),
   ]);
   assert.equal(adminResults.filter((result) => result.includes('"success":true')).length, 1);
   assert.equal(adminResults.filter((result) => result.includes('"code":"SLOT_CONFLICT"')).length, 1);

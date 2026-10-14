@@ -9,7 +9,7 @@ import type { ReservationResult } from "../types";
 import { ReservationError } from "../types";
 import {
   approveReservation, availability, cancelReservation, createAdminReservation, createReservation, dailyAvailability,
-  getReservation, listActiveUsers, listReservations, pendingReservationCount, rejectReservation, reservationsForDate,
+  getReservation, groupedReservationsForDate, listActiveUsers, listReservations, pendingReservationCount, rejectReservation, reservationsForDate,
 } from "../services/reservation-service";
 
 function databaseCode(error: unknown): string | undefined {
@@ -98,4 +98,7 @@ export async function getDailyAvailabilityAction(input: unknown) {
 }
 export async function getReservationsForDateAction(input: unknown) {
   return run(() => reservationsForDate(dailySchema.parse(input)));
+}
+export async function getGroupedReservationsForDateAction(input: unknown) {
+  return run(() => groupedReservationsForDate(dailySchema.parse(input)));
 }

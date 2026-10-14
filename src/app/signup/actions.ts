@@ -15,11 +15,13 @@ const registrationSchema = z.object({
   email: emailSchema,
   password: passwordSchema,
   confirmPassword: z.string(),
+  departmentId: z.string().uuid("Choose an active department."),
 }).refine((value) => value.password === value.confirmPassword, {
   path: ["confirmPassword"], message: "Passwords do not match.",
 });
 
 export type SignupState = { message?: string; fieldErrors?: Record<string, string[]> };
+class InactiveDepartmentError extends Error {}
 
 export async function signupAction(_state: SignupState, data: FormData): Promise<SignupState> {
   const address = clientAddress(await headers());
@@ -36,6 +38,7 @@ export async function signupAction(_state: SignupState, data: FormData): Promise
     email: data.get("email"),
     password: data.get("password"),
     confirmPassword: data.get("confirmPassword"),
+    departmentId: data.get("departmentId"),
   });
   if (!parsed.success) {
     return { fieldErrors: parsed.error.flatten().fieldErrors as Record<string, string[]> };
@@ -46,15 +49,22 @@ export async function signupAction(_state: SignupState, data: FormData): Promise
 
   try {
     const passwordHash = await hash(parsed.data.password);
-    await prisma.user.create({
-      data: {
-        name: parsed.data.name,
-        email: parsed.data.email,
-        passwordHash,
-        role: "MEMBER",
-      },
+    await prisma.$transaction(async (tx) => {
+      const departments = await tx.$queryRaw<Array<{ id: string }>>`
+        SELECT id FROM departments WHERE id = ${parsed.data.departmentId}::uuid AND "isActive" FOR SHARE`;
+      if (!departments[0]) throw new InactiveDepartmentError();
+      await tx.user.create({
+        data: {
+          name: parsed.data.name,
+          email: parsed.data.email,
+          passwordHash,
+          departmentId: parsed.data.departmentId,
+          role: "MEMBER",
+        },
+      });
     });
   } catch (error) {
+    if (error instanceof InactiveDepartmentError) return { fieldErrors: { departmentId: ["Choose an active department."] } };
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
       return { message: "Unable to create an account with these details. Try signing in or use another email." };
     }
