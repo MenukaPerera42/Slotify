@@ -17,6 +17,7 @@ import { useState } from "react";
 import { cn } from "@/lib/utils";
 import { logoutAction } from "@/features/auth/actions";
 import { SlotifyLogo } from "./slotify-logo";
+import { SlotifyIcon } from "./slotify-icon";
 
 const baseNavigationItems = [
   {
@@ -44,8 +45,9 @@ export function AppSidebar({ user }: { user: { name: string; email: string; role
     <>
       {/* Mobile Top Navbar */}
       <div className="lg:hidden flex items-center justify-between px-5 py-3.5 bg-white border-b border-[#E5E7EB] sticky top-0 z-30">
-        <Link href="/dashboard" className="flex items-center gap-2.5">
-          <SlotifyLogo className="w-32" priority />
+        <Link href="/dashboard" className="flex items-center gap-2">
+          <SlotifyIcon className="h-7 w-7" priority />
+          <span className="font-extrabold text-slate-900 text-lg tracking-tight">Slotify</span>
         </Link>
         <button
           type="button"
