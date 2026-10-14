@@ -14,7 +14,7 @@ const registrationVerificationSchema = z.strictObject({ challengeId: uuid, code:
 const emailChangeSchema = z.strictObject({ userId: uuid, newEmail: emailSchema });
 const emailChangeVerificationSchema = z.strictObject({ challengeId: uuid, code: otp });
 
-function invalidInput() { throw new VerificationError("INVALID_INPUT", "Check the submitted fields."); }
+function invalidInput(): never { throw new VerificationError("INVALID_INPUT", "Check the submitted fields."); }
 
 export async function verifyRegistrationOtpAction(input: unknown) {
   return verificationResult(async () => {

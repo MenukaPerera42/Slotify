@@ -73,7 +73,9 @@ export function AdminOfficeShifts() {
   const router = useRouter();
   const toast = useToast();
   const toastRef = useRef(toast);
-  toastRef.current = toast;
+  useEffect(() => {
+    toastRef.current = toast;
+  }, [toast]);
   const [, startTransition] = useTransition();
 
   const [shifts, setShifts] = useState<ShiftRecord[]>([]);

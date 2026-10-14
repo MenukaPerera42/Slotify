@@ -4,7 +4,7 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: "Slotify — Resource Reservation Management System",
   description:
-    "PrimeWave Lab Software Engineering Internship Technical Assessment: Enterprise resource organization, reservation management, availability tracking, and conflict prevention.",
+    "Enterprise resource organization, reservation management, availability tracking, and conflict prevention.",
   icons: {
     icon: [
       { url: "/favicon.ico", sizes: "any" },

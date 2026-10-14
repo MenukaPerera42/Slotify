@@ -141,7 +141,7 @@ export function AppSidebar({ user }: { user: { name: string; email: string; role
           <div className="px-5 py-2">
             <div className="h-px bg-slate-100" />
             <span className="text-[10px] font-semibold tracking-wider text-slate-300 uppercase block mt-2">
-              Assessment Scope
+              Workspace
             </span>
           </div>
 

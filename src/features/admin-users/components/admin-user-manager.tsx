@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import {
   Users,
@@ -29,6 +29,12 @@ import {
   setUserRoleAction,
   setUserActiveAction,
 } from "@/features/admin-users/actions/admin-user-actions";
+import {
+  requestAdminEmailChangeAction,
+  verifyPendingEmailChangeAction,
+  cancelPendingEmailChangeAction,
+  getPendingEmailChangeStateAction,
+} from "@/features/email-verification/actions";
 import { assignUserDepartmentAction } from "@/features/departments/actions/department-actions";
 import {
   listUnassignedReservationsAction,
@@ -112,6 +118,28 @@ export function AdminUserManager({
     email: "",
   });
   const [editFieldErrors, setEditFieldErrors] = useState<Record<string, string[]>>({});
+
+  // Email Verification State for Edit Profile
+  const [pendingEmailChange, setPendingEmailChange] = useState<{
+    challengeId: string;
+    targetEmail: string;
+    expiresAt: Date | string;
+    resendAvailableAt?: Date | string;
+    status: "PENDING" | "EXPIRED";
+  } | null>(null);
+  const [emailChangeOtp, setEmailChangeOtp] = useState("");
+  const [isRequestingEmailChange, setIsRequestingEmailChange] = useState(false);
+  const [isVerifyingEmailOtp, setIsVerifyingEmailOtp] = useState(false);
+  const [emailChangeCooldown, setEmailChangeCooldown] = useState(0);
+  const [emailChangeError, setEmailChangeError] = useState("");
+
+  useEffect(() => {
+    if (emailChangeCooldown <= 0) return;
+    const timer = setInterval(() => {
+      setEmailChangeCooldown((c) => Math.max(0, c - 1));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [emailChangeCooldown]);
 
   // Change Department Form
   const [targetDeptId, setTargetDeptId] = useState("");
@@ -218,30 +246,173 @@ export function AdminUserManager({
     }
   };
 
+  const openEditUser = useCallback(async (u: AdminUserRecord) => {
+    setEditingUser(u);
+    setEditForm({
+      firstName: u.firstName || "",
+      lastName: u.lastName || "",
+      email: u.email,
+    });
+    setEditFieldErrors({});
+    setEmailChangeOtp("");
+    setEmailChangeError("");
+    setPendingEmailChange(null);
+
+    try {
+      const res = await getPendingEmailChangeStateAction(u.id);
+      if (res.success && res.data) {
+        setPendingEmailChange(res.data);
+        if (res.data.resendAvailableAt) {
+          const secs = Math.ceil(
+            (new Date(res.data.resendAvailableAt).getTime() - Date.now()) / 1000
+          );
+          if (secs > 0) setEmailChangeCooldown(secs);
+        }
+      }
+    } catch {
+      // Non-blocking
+    }
+  }, []);
+
+  const handleRequestEmailChange = async (targetEmailToRequest?: string) => {
+    if (!editingUser) return;
+    const targetEmail = targetEmailToRequest || editForm.email.trim();
+    if (!targetEmail || targetEmail === editingUser.email) return;
+
+    setEmailChangeError("");
+    setIsRequestingEmailChange(true);
+    try {
+      const res = await requestAdminEmailChangeAction({
+        userId: editingUser.id,
+        newEmail: targetEmail,
+      });
+      if (res.success) {
+        setPendingEmailChange({
+          challengeId: res.data.challengeId,
+          targetEmail: res.data.targetEmail,
+          expiresAt: res.data.expiresAt,
+          resendAvailableAt: res.data.resendAvailableAt,
+          status: "PENDING",
+        });
+        setEmailChangeCooldown(60);
+        setEmailChangeOtp("");
+        toast.success(`Verification code sent to ${targetEmail}.`);
+      } else {
+        setEmailChangeError(res.error || "Failed to request email change.");
+        toast.error(res.error || "Failed to request email change.");
+      }
+    } catch {
+      setEmailChangeError("An unexpected error occurred while requesting email change.");
+      toast.error("An unexpected error occurred.");
+    } finally {
+      setIsRequestingEmailChange(false);
+    }
+  };
+
+  const handleVerifyEmailChange = async () => {
+    if (!editingUser || !pendingEmailChange) return;
+    if (emailChangeOtp.length !== 6) {
+      setEmailChangeError("Enter the complete six-digit verification code.");
+      return;
+    }
+
+    setEmailChangeError("");
+    setIsVerifyingEmailOtp(true);
+    try {
+      const res = await verifyPendingEmailChangeAction({
+        challengeId: pendingEmailChange.challengeId,
+        code: emailChangeOtp,
+      });
+      if (res.success) {
+        const newEmail = pendingEmailChange.targetEmail;
+        toast.success(`Email updated and verified to ${newEmail}.`);
+        setEditingUser((prev) => (prev ? { ...prev, email: newEmail } : null));
+        setEditForm((prev) => ({ ...prev, email: newEmail }));
+        setPendingEmailChange(null);
+        setEmailChangeOtp("");
+        router.refresh();
+      } else {
+        setEmailChangeError(res.error || "Failed to verify code.");
+        toast.error(res.error || "Failed to verify code.");
+      }
+    } catch {
+      setEmailChangeError("An unexpected error occurred during verification.");
+      toast.error("An unexpected error occurred.");
+    } finally {
+      setIsVerifyingEmailOtp(false);
+    }
+  };
+
+  const handleCancelEmailChange = async () => {
+    if (!editingUser) return;
+    try {
+      const res = await cancelPendingEmailChangeAction(editingUser.id);
+      if (res.success) {
+        setPendingEmailChange(null);
+        setEditForm((prev) => ({ ...prev, email: editingUser.email }));
+        setEmailChangeOtp("");
+        setEmailChangeError("");
+        toast.info("Pending email change request cancelled.");
+      } else {
+        toast.error(res.error || "Failed to cancel request.");
+      }
+    } catch {
+      toast.error("Failed to cancel request.");
+    }
+  };
+
   // Handle Edit Profile
   const handleEditProfile = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingUser) return;
     setEditFieldErrors({});
+    setEmailChangeError("");
     setIsSubmitting(true);
 
     try {
-      const res = await updateUserProfileAction({
-        userId: editingUser.id,
-        firstName: editForm.firstName.trim() || undefined,
-        lastName: editForm.lastName.trim() || undefined,
-        email: editForm.email.trim() || undefined,
-      });
+      const isNameChanged =
+        editForm.firstName.trim() !== (editingUser.firstName || "") ||
+        editForm.lastName.trim() !== (editingUser.lastName || "");
+      const isEmailChanged =
+        editForm.email.trim() && editForm.email.trim() !== editingUser.email;
 
-      if (res.success) {
-        toast.success("User profile updated successfully.");
-        setEditingUser(null);
-        router.refresh();
-      } else {
-        if (res.fieldErrors) {
-          setEditFieldErrors(res.fieldErrors);
+      if (isNameChanged) {
+        const res = await updateUserProfileAction({
+          userId: editingUser.id,
+          firstName: editForm.firstName.trim() || undefined,
+          lastName: editForm.lastName.trim() || undefined,
+        });
+
+        if (!res.success) {
+          if (res.fieldErrors) {
+            setEditFieldErrors(res.fieldErrors);
+          }
+          toast.error(res.error || "Failed to update profile names.");
+          setIsSubmitting(false);
+          return;
         }
-        toast.error(res.error || "Failed to update profile.");
+        toast.success("User name updated successfully.");
+        setEditingUser((prev) =>
+          prev
+            ? {
+                ...prev,
+                firstName: editForm.firstName.trim(),
+                lastName: editForm.lastName.trim(),
+                name: `${editForm.firstName.trim()} ${editForm.lastName.trim()}`,
+              }
+            : null
+        );
+        router.refresh();
+      }
+
+      if (isEmailChanged && !pendingEmailChange) {
+        await handleRequestEmailChange(editForm.email.trim());
+        setIsSubmitting(false);
+        return;
+      }
+
+      if (!isEmailChanged && !pendingEmailChange) {
+        setEditingUser(null);
       }
     } catch {
       toast.error("An unexpected error occurred.");
@@ -662,15 +833,7 @@ export function AdminUserManager({
                               {/* Edit Profile */}
                               <button
                                 type="button"
-                                onClick={() => {
-                                  setEditingUser(u);
-                                  setEditForm({
-                                    firstName: u.firstName || "",
-                                    lastName: u.lastName || "",
-                                    email: u.email,
-                                  });
-                                  setEditFieldErrors({});
-                                }}
+                                onClick={() => openEditUser(u)}
                                 title="Edit user profile"
                                 className="p-1.5 rounded-lg text-slate-500 hover:text-blue-600 hover:bg-slate-100 transition-colors"
                               >
@@ -942,10 +1105,10 @@ export function AdminUserManager({
               <input
                 type={showPassword ? "text" : "password"}
                 required
-                minLength={8}
+                minLength={6}
                 value={addForm.initialPassword}
                 onChange={(e) => setAddForm({ ...addForm, initialPassword: e.target.value })}
-                placeholder="At least 8 characters"
+                placeholder="At least 6 characters (8+ recommended)"
                 className="h-9 w-full rounded-xl border border-slate-200 pl-3 pr-9 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-600"
               />
               <button
@@ -962,7 +1125,7 @@ export function AdminUserManager({
               </span>
             )}
             <p className="text-[11px] text-slate-400 mt-1">
-              Initial password is not stored in plaintext or displayed again. Share it securely with the user.
+              Minimum 6 characters, including a letter, number, and special character. (8+ recommended). Initial password is not stored in plaintext or displayed again.
             </p>
           </div>
 
@@ -992,7 +1155,12 @@ export function AdminUserManager({
       {/* MODAL 2: EDIT USER PROFILE */}
       <Modal
         isOpen={Boolean(editingUser)}
-        onClose={() => setEditingUser(null)}
+        onClose={() => {
+          setEditingUser(null);
+          setPendingEmailChange(null);
+          setEmailChangeOtp("");
+          setEmailChangeError("");
+        }}
         title="Edit User Profile"
         description={`Update profile information for ${editingUser?.name}.`}
       >
@@ -1035,20 +1203,154 @@ export function AdminUserManager({
             </div>
           </div>
 
-          <div>
-            <label className="text-xs font-bold text-slate-700 block mb-1">
-              Email Address
-            </label>
-            <input
-              type="email"
-              value={editForm.email}
-              onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
-              className="h-9 w-full rounded-xl border border-slate-200 px-3 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-600"
-            />
-            {editFieldErrors.email && (
-              <span className="text-[10px] text-rose-500 font-medium block mt-1">
-                {editFieldErrors.email[0]}
+          {/* Email Section with OTP Verification Integration */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-bold text-slate-700 block">
+                Email Address
+              </label>
+              <span className="text-[10px] text-slate-500 font-mono">
+                Active: {editingUser?.email}
               </span>
+            </div>
+
+            {pendingEmailChange ? (
+              <div className="rounded-xl border border-blue-200 bg-blue-50/70 p-3.5 space-y-3">
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-xs font-bold text-blue-950">Pending Email Change</span>
+                      <span
+                        className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                          pendingEmailChange.status === "EXPIRED"
+                            ? "bg-rose-100 text-rose-700 border border-rose-200"
+                            : "bg-blue-100 text-blue-800 border border-blue-200"
+                        }`}
+                      >
+                        {pendingEmailChange.status === "EXPIRED"
+                          ? "Code Expired"
+                          : "Verification Required"}
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-blue-800 mt-1">
+                      Confirmation code sent to:{" "}
+                      <span className="font-semibold text-blue-950">
+                        {pendingEmailChange.targetEmail}
+                      </span>
+                    </p>
+                    <p className="text-[10px] text-slate-500 mt-0.5">
+                      The user&apos;s active login email remains{" "}
+                      <span className="font-semibold text-slate-700">
+                        {editingUser?.email}
+                      </span>{" "}
+                      until verified.
+                    </p>
+                  </div>
+                </div>
+
+                {emailChangeError && (
+                  <p className="text-[11px] text-rose-600 bg-rose-50 border border-rose-200/80 p-2 rounded-lg">
+                    {emailChangeError}
+                  </p>
+                )}
+
+                <div className="space-y-2 pt-1 border-t border-blue-100">
+                  <label className="text-[11px] font-semibold text-slate-700 block">
+                    Enter Six-Digit Verification Code
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      pattern="[0-9]*"
+                      maxLength={6}
+                      value={emailChangeOtp}
+                      onChange={(e) =>
+                        setEmailChangeOtp(e.target.value.replace(/\D/g, "").slice(0, 6))
+                      }
+                      placeholder="000000"
+                      className="h-9 w-32 tracking-widest text-center font-mono text-sm font-bold rounded-xl border border-slate-200 bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-600"
+                    />
+                    <Button
+                      type="button"
+                      size="sm"
+                      disabled={isVerifyingEmailOtp || emailChangeOtp.length !== 6}
+                      onClick={handleVerifyEmailChange}
+                      className="h-9 text-xs font-semibold bg-blue-600 hover:bg-blue-700 text-white gap-1.5"
+                    >
+                      {isVerifyingEmailOtp && <Loader2 className="h-3 w-3 animate-spin" />}
+                      Verify & Apply
+                    </Button>
+                  </div>
+
+                  <div className="flex items-center justify-between pt-1 text-[11px]">
+                    <button
+                      type="button"
+                      disabled={emailChangeCooldown > 0 || isRequestingEmailChange}
+                      onClick={() => handleRequestEmailChange(pendingEmailChange.targetEmail)}
+                      className="text-blue-600 hover:text-blue-700 font-semibold disabled:text-slate-400 disabled:cursor-not-allowed"
+                    >
+                      {emailChangeCooldown > 0
+                        ? `Resend in ${emailChangeCooldown}s`
+                        : "Resend Code"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleCancelEmailChange}
+                      className="text-rose-600 hover:text-rose-700 font-medium"
+                    >
+                      Cancel Change
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div>
+                <input
+                  type="email"
+                  value={editForm.email}
+                  onChange={(e) => {
+                    setEditForm({ ...editForm, email: e.target.value });
+                    setEmailChangeError("");
+                  }}
+                  className="h-9 w-full rounded-xl border border-slate-200 px-3 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-600"
+                />
+                {editFieldErrors.email && (
+                  <span className="text-[10px] text-rose-500 font-medium block mt-1">
+                    {editFieldErrors.email[0]}
+                  </span>
+                )}
+                {emailChangeError && (
+                  <span className="text-[10px] text-rose-500 font-medium block mt-1">
+                    {emailChangeError}
+                  </span>
+                )}
+
+                {editForm.email.trim() &&
+                  editForm.email.trim() !== editingUser?.email && (
+                    <div className="mt-2.5 p-3 rounded-xl border border-blue-200 bg-blue-50/60 text-xs space-y-2">
+                      <p className="text-[11px] text-blue-900 leading-relaxed">
+                        <strong>Verification Required:</strong> Changing this user&apos;s email to{" "}
+                        <span className="font-semibold text-blue-950">
+                          {editForm.email.trim()}
+                        </span>{" "}
+                        requires OTP confirmation. Current email remains active until confirmed.
+                      </p>
+                      <Button
+                        type="button"
+                        size="sm"
+                        disabled={isRequestingEmailChange}
+                        onClick={() => handleRequestEmailChange(editForm.email.trim())}
+                        className="h-7 text-xs font-semibold bg-blue-600 hover:bg-blue-700 text-white gap-1.5"
+                      >
+                        {isRequestingEmailChange && (
+                          <Loader2 className="h-3 w-3 animate-spin" />
+                        )}
+                        Send Verification Code
+                      </Button>
+                    </div>
+                  )}
+              </div>
             )}
           </div>
 
@@ -1063,7 +1365,12 @@ export function AdminUserManager({
               type="button"
               variant="outline"
               size="sm"
-              onClick={() => setEditingUser(null)}
+              onClick={() => {
+                setEditingUser(null);
+                setPendingEmailChange(null);
+                setEmailChangeOtp("");
+                setEmailChangeError("");
+              }}
               className="h-8 text-xs font-semibold text-slate-700"
             >
               Cancel

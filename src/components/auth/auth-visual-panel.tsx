@@ -40,7 +40,7 @@ export function AuthVisualPanel({
         </div>
         <div className="flex items-center gap-1.5 text-xs text-blue-200/80">
           <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
-          <span>Active Assessment Mode</span>
+          <span>Real-Time Engine</span>
         </div>
       </div>
 

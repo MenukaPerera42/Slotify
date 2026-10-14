@@ -564,7 +564,7 @@ export default async function HomePage() {
                 Architectural Integrity by Design
               </h2>
               <p className="text-sm sm:text-base text-slate-600">
-                Engineered for the PrimeWave Lab Software Engineering Internship Technical Assessment.
+                Engineered for high-concurrency enterprise scheduling and conflict prevention.
               </p>
             </div>
 
@@ -689,7 +689,7 @@ export default async function HomePage() {
               &copy; {new Date().getFullYear()} Slotify Inc. All rights reserved.
             </span>
             <span>
-              PrimeWave Lab Software Engineering Internship Technical Assessment
+              Resource Reservation Management System
             </span>
           </div>
         </div>
