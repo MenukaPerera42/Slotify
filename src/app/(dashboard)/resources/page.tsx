@@ -2,6 +2,7 @@ import { getResources, getCategories } from "@/features/resources/services/resou
 import { ResourcesPageClient } from "@/features/resources/components/resources-page-client";
 import { requireUser } from "@/lib/authorization";
 import { resourceQuerySchema } from "@/features/resources/schemas/resource-schema";
+import { publicActiveDepartments } from "@/features/departments/services/department-service";
 
 export const metadata = {
   title: "Resources | Slotify",
@@ -25,6 +26,7 @@ export default async function ResourcesPage({
   const query = filters.success ? filters.data : resourceQuerySchema.parse({});
   const categories = await getCategories();
   const resources = await getResources(query);
+  const departments = await publicActiveDepartments();
 
   return (
     <div className="flex-1 flex flex-col min-w-0">
@@ -45,6 +47,7 @@ export default async function ResourcesPage({
           }}
           resources={resources}
           categories={categories}
+          departments={departments}
           selectedCategory={query.categoryId || "ALL"}
           selectedStatus={query.status}
           searchQuery={query.search || ""}

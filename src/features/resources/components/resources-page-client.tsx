@@ -7,8 +7,11 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { ResourceToolbar } from "./resource-toolbar";
 import { TimelineGrid, type ReservationOccupancy } from "./timeline-grid";
 import { AvailabilityCard } from "./availability-card";
-import { ReservationFormModal, type ResourceOption } from "@/features/reservations/components/reservation-form-modal";
-import { getReservationsForDateAction } from "@/features/reservations/actions/reservation-actions";
+import {
+  ReservationFormModal,
+  type ResourceOption,
+} from "@/features/reservations/components/reservation-form-modal";
+import { getGroupedReservationsForDateAction } from "@/features/reservations/actions/reservation-actions";
 import {
   getColomboTodayString,
   BUSINESS_TIME_SLOTS,
@@ -24,6 +27,7 @@ interface ResourcesPageClientProps {
   };
   resources: ResourceItem[];
   categories: { id: string; name: string }[];
+  departments?: { id: string; name: string; code: string }[];
   selectedCategory?: string;
   selectedStatus?: string;
   searchQuery?: string;
@@ -33,6 +37,7 @@ export function ResourcesPageClient({
   user,
   resources,
   categories,
+  departments = [],
   selectedCategory = "ALL",
   selectedStatus = "ALL",
   searchQuery = "",
@@ -58,10 +63,10 @@ export function ResourcesPageClient({
     resourceId: bookResourceIdParam || undefined,
   });
 
-  // Fetch real occupancy for the selected date
+  // Fetch real grouped occupancy for the selected date
   const fetchOccupancy = useCallback((dateStr: string) => {
     setIsLoadingOccupancy(true);
-    getReservationsForDateAction({ date: dateStr })
+    getGroupedReservationsForDateAction({ date: dateStr })
       .then((res) => {
         if (res.success) {
           setOccupancy(res.data as ReservationOccupancy[]);
@@ -78,7 +83,7 @@ export function ResourcesPageClient({
   // Fetch when selectedDate changes
   useEffect(() => {
     let isCurrent = true;
-    getReservationsForDateAction({ date: selectedDate })
+    getGroupedReservationsForDateAction({ date: selectedDate })
       .then((res) => {
         if (isCurrent && res.success) {
           setOccupancy(res.data as ReservationOccupancy[]);
@@ -150,7 +155,7 @@ export function ResourcesPageClient({
   return (
     <>
       <div className="space-y-6">
-        {/* Toolbar: View Tabs + Dynamic Date Strip Bar + Filters */}
+        {/* Toolbar: View Tabs + Single Dynamic Date Strip Bar + Filters */}
         <ResourceToolbar
           categories={categories}
           canManage={user.role === "ADMIN"}
@@ -163,13 +168,14 @@ export function ResourcesPageClient({
           onViewChange={(view) => setActiveView(view)}
         />
 
-        {/* Timeline Grid matching reference middle section */}
+        {/* Timeline Grid: Continuous Multi-hour Blocks + Adjacent Grouping */}
         {activeView === "calendar" && resources.length > 0 && (
           <div className="space-y-3">
             <TimelineGrid
               resources={resources}
               selectedDate={selectedDate}
               occupancy={occupancy}
+              departments={departments}
               isAdmin={user.role === "ADMIN"}
               isLoading={isLoadingOccupancy}
               onSelectSlot={handleSelectSlot}
@@ -240,6 +246,7 @@ export function ResourcesPageClient({
             router.refresh();
           }}
           resources={modalResources}
+          departments={departments}
           isAdmin={user.role === "ADMIN"}
           initialResourceId={bookingModalState.resourceId}
           initialDate={selectedDate}
@@ -250,4 +257,3 @@ export function ResourcesPageClient({
     </>
   );
 }
-

@@ -43,7 +43,9 @@ export function ResourceToolbar({
   const [search, setSearch] = useState(searchQuery);
 
   const updateFilters = (key: string, value: string) => {
-    const current = new URLSearchParams(searchParams ? Array.from(searchParams.entries()) : []);
+    const current = new URLSearchParams(
+      searchParams ? Array.from(searchParams.entries()) : []
+    );
 
     if (!value || value === "ALL" || value === "") {
       current.delete(key);
@@ -59,7 +61,7 @@ export function ResourceToolbar({
 
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    updateFilters("search", search);
+    updateFilters("search", search.trim());
   };
 
   const handleReset = () => {
@@ -72,8 +74,7 @@ export function ResourceToolbar({
   return (
     <>
       <div className="space-y-4">
-        {/* Top Segment: Reference-style Tabs (Calendar / Interactive map) + Add Button */}
-        {/* Top Segment: Reference-style Tabs (Calendar / Catalog Cards) + Add Button */}
+        {/* Top Segment: Tabs (Calendar / Catalog Cards) + Add Button */}
         <div className="flex items-center justify-between gap-4">
           <div className="flex items-center gap-2">
             <button
@@ -100,14 +101,6 @@ export function ResourceToolbar({
             </button>
           </div>
 
-          {canManage && <Button
-            onClick={() => setIsAddOpen(true)}
-            size="sm"
-            className="rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-medium text-xs flex items-center gap-1.5 shadow-xs"
-          >
-            <Plus className="h-4 w-4" />
-            <span>Add Resource</span>
-          </Button>}
           {canManage && (
             <Button
               onClick={() => setIsAddOpen(true)}
@@ -120,15 +113,13 @@ export function ResourceToolbar({
           )}
         </div>
 
-        {/* Date Strip Bar matching reference screenshot position */}
-        <DateStripBar />
-        {/* Dynamic Date Strip Bar wired to active date */}
+        {/* Dynamic Date Strip Bar (Exactly ONE instance wired to active date) */}
         <DateStripBar
           selectedDate={selectedDate}
           onSelectDate={onSelectDate}
         />
 
-        {/* Filter inputs matching reference screenshot search pills */}
+        {/* Filter inputs matching reference layout */}
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
           {/* Search Input Box */}
           <form onSubmit={handleSearchSubmit} className="relative flex items-center">
@@ -137,6 +128,7 @@ export function ResourceToolbar({
               type="text"
               placeholder="Search resource name..."
               value={search}
+              maxLength={100}
               onChange={(e) => setSearch(e.target.value)}
               className="h-10 w-full rounded-xl border border-[#E5E7EB] bg-white pl-9 pr-16 text-xs text-slate-800 shadow-2xs placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-600 focus:border-transparent transition-all"
             />
@@ -170,7 +162,6 @@ export function ResourceToolbar({
             </div>
           </div>
 
-          {/* Status Dropdown styled as pill */}
           {/* Operational Status Dropdown */}
           <div className="flex items-center gap-2">
             <div className="relative flex-1">
@@ -181,7 +172,6 @@ export function ResourceToolbar({
                 className="h-10 w-full rounded-xl border border-[#E5E7EB] bg-white px-3.5 text-xs text-slate-700 shadow-2xs focus:outline-none focus:ring-2 focus:ring-blue-600 transition-all appearance-none cursor-pointer"
               >
                 <option value="ALL">Operational status (All)</option>
-                <option value="ACTIVE">Active Available</option>
                 <option value="ACTIVE">Operational (Active)</option>
                 <option value="INACTIVE">Deactivated</option>
               </select>
@@ -205,11 +195,6 @@ export function ResourceToolbar({
         </div>
       </div>
 
-      {canManage && <ResourceFormModal
-        isOpen={isAddOpen}
-        onClose={() => setIsAddOpen(false)}
-        categories={categories}
-      />}
       {canManage && (
         <ResourceFormModal
           isOpen={isAddOpen}

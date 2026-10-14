@@ -12,6 +12,7 @@ import {
   FileText,
   UserCheck,
   ShieldAlert,
+  Briefcase,
 } from "lucide-react";
 import { Modal } from "@/components/ui/modal";
 import { Button } from "@/components/ui/button";
@@ -22,6 +23,7 @@ import {
   findAvailableResourcesAction,
   listActiveUsersAction,
 } from "../actions/reservation-actions";
+import { getMyDepartmentAction } from "@/features/departments/actions/department-actions";
 import {
   BUSINESS_TIME_SLOTS,
   formatSlotLabel,
@@ -38,6 +40,12 @@ export interface ResourceOption {
   category?: { name: string } | null;
 }
 
+export interface DepartmentOption {
+  id: string;
+  name: string;
+  code: string;
+}
+
 interface ActiveUserOption {
   id: string;
   name: string;
@@ -51,6 +59,7 @@ interface ReservationFormModalProps {
   onClose: () => void;
   onSuccess?: () => void;
   resources: ResourceOption[];
+  departments?: DepartmentOption[];
   isAdmin?: boolean;
   initialResourceId?: string;
   initialDate?: string;
@@ -63,6 +72,7 @@ export function ReservationFormModal({
   onClose,
   onSuccess,
   resources,
+  departments = [],
   isAdmin = false,
   initialResourceId,
   initialDate,
@@ -75,13 +85,24 @@ export function ReservationFormModal({
   // Active resources only
   const activeResources = resources.filter((r) => r.isActive !== false);
 
-  // Admin booking mode: "self" | "behalf"
-  const [bookingMode, setBookingMode] = useState<"self" | "behalf">("self");
-  const [targetUserId, setTargetUserId] = useState<string>("");
-  const [activeUsers, setActiveUsers] = useState<ActiveUserOption[]>([]);
-  const [isLoadingUsers, setIsLoadingUsers] = useState(false);
-  const [userSearch, setUserSearch] = useState("");
+  // Authenticated user's department state
+  const [myDepartment, setMyDepartment] = useState<{
+    id: string;
+    name: string;
+    code: string;
+  } | null>(null);
+  const [isAssignmentRequired, setIsAssignmentRequired] = useState(false);
 
+  // Admin booking mode: "self" (Mode A) | "user" (Mode B) | "dept" (Mode C)
+  const [adminMode, setAdminMode] = useState<"self" | "user" | "dept">("self");
+  const [selectedDeptId, setSelectedDeptId] = useState<string>(
+    departments[0]?.id || ""
+  );
+  const [targetUserId, setTargetUserId] = useState<string>("");
+  const [deptUsers, setDeptUsers] = useState<ActiveUserOption[]>([]);
+  const [isLoadingUsers, setIsLoadingUsers] = useState(false);
+
+  // Form field states
   const [resourceId, setResourceId] = useState(
     initialResourceId || (activeResources[0]?.id ?? "")
   );
@@ -97,29 +118,69 @@ export function ReservationFormModal({
   >("idle");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  // Switch mode and load active users when admin selects behalf mode
-  const handleSelectMode = (mode: "self" | "behalf") => {
-    setBookingMode(mode);
-    if (mode === "behalf" && activeUsers.length === 0) {
-      setIsLoadingUsers(true);
-      listActiveUsersAction({ pageSize: 100 })
-        .then((res) => {
-          if (res.success) {
-            const assignedUsers = res.data.items.filter((user) => user.departmentId);
-            setActiveUsers(assignedUsers);
-            if (assignedUsers.length > 0) {
-              setTargetUserId((prev) => prev || assignedUsers[0].id);
-            }
+  const loadUsersForDepartment = (deptId: string) => {
+    setIsLoadingUsers(true);
+    listActiveUsersAction({ departmentId: deptId, pageSize: 100 })
+      .then((res) => {
+        if (res.success && res.data) {
+          const usersInDept = res.data.items.filter(
+            (u) => u.departmentId === deptId
+          );
+          setDeptUsers(usersInDept);
+          if (usersInDept.length > 0) {
+            setTargetUserId(usersInDept[0].id);
+          } else {
+            setTargetUserId("");
           }
-        })
-        .catch((err) => {
-          console.error("Failed to load active users:", err);
-        })
-        .finally(() => {
-          setIsLoadingUsers(false);
-        });
+        }
+      })
+      .catch((err) => {
+        console.error("Failed to load department users:", err);
+      })
+      .finally(() => {
+        setIsLoadingUsers(false);
+      });
+  };
+
+  const handleAdminModeChange = (mode: "self" | "user" | "dept") => {
+    setAdminMode(mode);
+    if (mode === "user") {
+      const activeDeptId = selectedDeptId || departments[0]?.id || "";
+      if (activeDeptId) {
+        loadUsersForDepartment(activeDeptId);
+      }
     }
   };
+
+  const handleDeptSelect = (deptId: string) => {
+    setSelectedDeptId(deptId);
+    if (adminMode === "user") {
+      loadUsersForDepartment(deptId);
+    }
+  };
+
+  // Fetch current user's department on open
+  useEffect(() => {
+    if (!isOpen) return;
+    let isCurrent = true;
+    getMyDepartmentAction()
+      .then((res) => {
+        if (isCurrent && res.success && res.data) {
+          setMyDepartment(res.data.department);
+          setIsAssignmentRequired(res.data.assignmentRequired);
+          if (res.data.department?.id) {
+            setSelectedDeptId((prev) => prev || res.data.department!.id);
+          }
+        }
+      })
+      .catch((err) => {
+        console.error("Failed to load user department:", err);
+      });
+
+    return () => {
+      isCurrent = false;
+    };
+  }, [isOpen]);
 
   // Derived validation
   const isInvalidTimeOrder = Boolean(startTime && endTime && startTime >= endTime);
@@ -194,40 +255,70 @@ export function ReservationFormModal({
       return;
     }
 
-    if (isAdmin && bookingMode === "behalf" && !targetUserId) {
-      setErrorMessage("Please select the target user on whose behalf you are booking.");
+    // Member validation
+    if (!isAdmin && isAssignmentRequired) {
+      setErrorMessage("Department assignment required. Please contact an administrator.");
       return;
     }
 
-    const targetDepartmentId = activeUsers.find((user) => user.id === targetUserId)?.departmentId;
-    if (isAdmin && bookingMode === "behalf" && !targetDepartmentId) {
-      setErrorMessage("The selected user needs an active department assignment.");
-      return;
+    // Admin validation
+    if (isAdmin) {
+      if (adminMode === "self" && isAssignmentRequired) {
+        setErrorMessage(
+          "Your account requires an active department assignment to self-book. Assign your department in Administration, or use Department-Only mode."
+        );
+        return;
+      }
+      if (adminMode === "user" && !targetUserId) {
+        setErrorMessage("Please select a target user belonging to the selected department.");
+        return;
+      }
+      if ((adminMode === "user" || adminMode === "dept") && !selectedDeptId) {
+        setErrorMessage("Please choose an active department.");
+        return;
+      }
     }
 
     const startISO = createColomboISO(date, startTime);
 
     startTransition(async () => {
-      const result =
-        isAdmin && bookingMode === "behalf"
-          ? await createAdminReservationAction({
-              departmentId: targetDepartmentId!,
-              targetUserId,
-              resourceId,
-              title: title.trim(),
-              startTime: startISO,
-              endTime: endISO,
-            })
-          : await createReservationAction({
-              resourceId,
-              title: title.trim(),
-              startTime: startISO,
-              endTime: endISO,
-            });
+      let result;
+      if (!isAdmin || adminMode === "self") {
+        // Mode A: Self-booking (Member -> PENDING; Admin -> APPROVED)
+        result = await createReservationAction({
+          resourceId,
+          title: title.trim(),
+          startTime: startISO,
+          endTime: endISO,
+        });
+      } else if (adminMode === "user") {
+        // Mode B: On behalf of user
+        result = await createAdminReservationAction({
+          departmentId: selectedDeptId,
+          targetUserId,
+          resourceId,
+          title: title.trim(),
+          startTime: startISO,
+          endTime: endISO,
+        });
+      } else {
+        // Mode C: Department-only booking
+        result = await createAdminReservationAction({
+          departmentId: selectedDeptId,
+          resourceId,
+          title: title.trim(),
+          startTime: startISO,
+          endTime: endISO,
+        });
+      }
 
       if (!result.success) {
         if (result.code === "SLOT_CONFLICT") {
           setErrorMessage("This time slot is already requested or reserved. Refresh availability and choose another time.");
+        } else if (result.code === "DEPARTMENT_REQUIRED") {
+          setErrorMessage("An active department assignment is required to make a reservation.");
+        } else if (result.code === "DEPARTMENT_MISMATCH") {
+          setErrorMessage("The selected user does not belong to the selected department.");
         } else if (result.code === "RESOURCE_INACTIVE") {
           setErrorMessage("This resource is currently inactive and cannot be reserved.");
         } else if (result.code === "USER_NOT_FOUND") {
@@ -248,13 +339,6 @@ export function ReservationFormModal({
 
   const selectedResource = resources.find((r) => r.id === resourceId);
 
-  // Filter users by search term
-  const filteredUsers = activeUsers.filter((u) => {
-    if (!userSearch) return true;
-    const term = userSearch.toLowerCase();
-    return u.name.toLowerCase().includes(term) || u.email.toLowerCase().includes(term);
-  });
-
   return (
     <Modal
       isOpen={isOpen}
@@ -271,81 +355,168 @@ export function ReservationFormModal({
           </div>
         )}
 
-        {/* Admin Mode Switcher: Mode A (Self) vs Mode B (On behalf of user) */}
+        {/* Member Department Warning Banner (Phase 6) */}
+        {!isAdmin && isAssignmentRequired && (
+          <div className="p-3.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-xs space-y-1.5">
+            <div className="flex items-center gap-1.5 font-bold text-amber-900">
+              <ShieldAlert className="h-4 w-4 text-amber-600" />
+              <span>Department Assignment Required</span>
+            </div>
+            <p className="text-amber-700 leading-relaxed">
+              Your account does not currently have an assigned organizational department.
+              A valid department assignment is required before you can request resource reservations.
+              Please contact your system administrator to assign your account to a department.
+            </p>
+          </div>
+        )}
+
+        {/* Member Assigned Department Read-Only Indicator (Phase 6) */}
+        {!isAdmin && !isAssignmentRequired && myDepartment && (
+          <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 text-xs flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Briefcase className="h-4 w-4 text-slate-500" />
+              <span className="font-semibold text-slate-700">Department:</span>
+              <span className="font-bold text-slate-900">
+                {myDepartment.name} ({myDepartment.code})
+              </span>
+            </div>
+            <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200">
+              Assigned Department
+            </span>
+          </div>
+        )}
+
+        {/* Admin 3-Mode Selector (Phase 7) */}
         {isAdmin && (
-          <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 space-y-2">
+          <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 space-y-2.5">
             <label className="text-xs font-semibold text-slate-800 flex items-center gap-1.5">
               <UserCheck className="h-3.5 w-3.5 text-blue-600" />
-              Booking Mode
+              Admin Booking Mode
             </label>
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-3 gap-1.5">
               <button
                 type="button"
-                onClick={() => handleSelectMode("self")}
-                className={`py-2 px-3 rounded-lg text-xs font-semibold transition-all border ${
-                  bookingMode === "self"
+                onClick={() => handleAdminModeChange("self")}
+                className={`py-1.5 px-2 rounded-lg text-xs font-semibold transition-all border text-center ${
+                  adminMode === "self"
                     ? "bg-white text-blue-700 border-blue-200 shadow-2xs"
                     : "bg-transparent text-slate-600 border-transparent hover:bg-slate-100"
                 }`}
               >
-                Book for Myself
+                Mode A: Myself
               </button>
               <button
                 type="button"
-                onClick={() => handleSelectMode("behalf")}
-                className={`py-2 px-3 rounded-lg text-xs font-semibold transition-all border ${
-                  bookingMode === "behalf"
+                onClick={() => handleAdminModeChange("user")}
+                className={`py-1.5 px-2 rounded-lg text-xs font-semibold transition-all border text-center ${
+                  adminMode === "user"
                     ? "bg-white text-blue-700 border-blue-200 shadow-2xs"
                     : "bg-transparent text-slate-600 border-transparent hover:bg-slate-100"
                 }`}
               >
-                Book on Behalf of User
+                Mode B: For User
+              </button>
+              <button
+                type="button"
+                onClick={() => handleAdminModeChange("dept")}
+                className={`py-1.5 px-2 rounded-lg text-xs font-semibold transition-all border text-center ${
+                  adminMode === "dept"
+                    ? "bg-white text-blue-700 border-blue-200 shadow-2xs"
+                    : "bg-transparent text-slate-600 border-transparent hover:bg-slate-100"
+                }`}
+              >
+                Mode C: Department Only
               </button>
             </div>
 
-            {bookingMode === "behalf" && (
-              <div className="pt-2 space-y-2">
-                <div className="p-2.5 rounded-lg bg-blue-50/70 border border-blue-100 text-[11px] text-blue-800 flex items-start gap-2">
-                  <ShieldAlert className="h-3.5 w-3.5 text-blue-600 shrink-0 mt-0.5" />
-                  <div>
-                    Admin on-behalf reservations are directly <strong>APPROVED</strong> and owned by the selected target user.
-                  </div>
-                </div>
+            {/* Mode Explanation & Inputs */}
+            {adminMode === "self" && (
+              <div className="text-[11px] text-slate-600">
+                {myDepartment ? (
+                  <span>
+                    Directly approved under your assigned department:{" "}
+                    <strong>{myDepartment.name} ({myDepartment.code})</strong>.
+                  </span>
+                ) : (
+                  <span className="text-amber-700 font-medium">
+                    ⚠ Your account is unassigned. Please assign your department in Administration or choose Mode C.
+                  </span>
+                )}
+              </div>
+            )}
 
-                <div className="space-y-1">
-                  <label className="text-[11px] font-semibold text-slate-700">
-                    Target User
-                  </label>
-                  {isLoadingUsers ? (
-                    <div className="py-2 text-xs text-slate-400 flex items-center gap-1.5">
-                      <Loader2 className="h-3.5 w-3.5 animate-spin text-blue-600" />
-                      Loading active team members...
-                    </div>
-                  ) : (
-                    <>
-                      {activeUsers.length > 5 && (
-                        <input
-                          type="text"
-                          placeholder="Search user name or email..."
-                          value={userSearch}
-                          onChange={(e) => setUserSearch(e.target.value)}
-                          className="w-full px-2.5 py-1.5 text-xs rounded-lg border border-slate-200 bg-white mb-1.5 text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-blue-600"
-                        />
-                      )}
+            {adminMode === "user" && (
+              <div className="space-y-2 pt-1 border-t border-slate-200/80">
+                <p className="text-[11px] text-slate-500">
+                  Select a department first, then select an active user belonging to that department.
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">
+                      Department
+                    </label>
+                    <select
+                      value={selectedDeptId}
+                      onChange={(e) => handleDeptSelect(e.target.value)}
+                      className="w-full h-8 rounded-lg border border-slate-300 bg-white px-2 text-xs text-slate-800"
+                    >
+                      {departments.map((d) => (
+                        <option key={d.id} value={d.id}>
+                          {d.name} ({d.code})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">
+                      Target User
+                    </label>
+                    {isLoadingUsers ? (
+                      <div className="h-8 flex items-center px-2 text-xs text-slate-400">
+                        <Loader2 className="h-3 w-3 animate-spin mr-1.5" /> Loading users...
+                      </div>
+                    ) : deptUsers.length === 0 ? (
+                      <div className="h-8 flex items-center px-2 text-xs text-amber-600 font-medium">
+                        No active users in dept
+                      </div>
+                    ) : (
                       <select
                         value={targetUserId}
                         onChange={(e) => setTargetUserId(e.target.value)}
-                        required
-                        className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600 transition-all"
+                        className="w-full h-8 rounded-lg border border-slate-300 bg-white px-2 text-xs text-slate-800"
                       >
-                        {filteredUsers.map((u) => (
+                        {deptUsers.map((u) => (
                           <option key={u.id} value={u.id}>
-                            {u.name} ({u.email}) · {u.role}
+                            {u.name} ({u.email})
                           </option>
                         ))}
                       </select>
-                    </>
-                  )}
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {adminMode === "dept" && (
+              <div className="space-y-2 pt-1 border-t border-slate-200/80">
+                <p className="text-[11px] text-slate-500">
+                  Department-only booking: The resource will be reserved for the entire department as a shared unit. No individual user account will be assigned.
+                </p>
+                <div>
+                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">
+                    Department
+                  </label>
+                  <select
+                    value={selectedDeptId}
+                    onChange={(e) => handleDeptSelect(e.target.value)}
+                    className="w-full h-8 rounded-lg border border-slate-300 bg-white px-2 text-xs text-slate-800"
+                  >
+                    {departments.map((d) => (
+                      <option key={d.id} value={d.id}>
+                        {d.name} ({d.code})
+                      </option>
+                    ))}
+                  </select>
                 </div>
               </div>
             )}
@@ -354,36 +525,34 @@ export function ReservationFormModal({
 
         {/* Resource Selection */}
         <div className="space-y-1.5">
-          <label className="text-xs font-semibold text-slate-700 flex items-center gap-1.5">
-            <Building2 className="h-3.5 w-3.5 text-slate-400" />
+          <label className="text-xs font-semibold text-slate-800 flex items-center gap-1.5">
+            <Building2 className="h-3.5 w-3.5 text-blue-600" />
             Resource
           </label>
           <select
             value={resourceId}
             onChange={(e) => setResourceId(e.target.value)}
-            required
-            className="w-full px-3 py-2 text-sm rounded-xl border border-slate-200 bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600 focus:border-transparent transition-all"
+            disabled={activeResources.length === 0}
+            className="w-full h-10 rounded-xl border border-slate-300 bg-white px-3 text-xs text-slate-800 shadow-2xs focus:outline-none focus:ring-2 focus:ring-blue-600"
           >
-            {activeResources.length === 0 && (
-              <option value="" disabled>No active resources available</option>
-            )}
-            {activeResources.map((res) => (
-              <option key={res.id} value={res.id}>
-                {res.name} {res.category ? `(${res.category.name})` : ""} {res.capacity ? `· ${res.capacity} people` : ""}
+            {activeResources.map((r) => (
+              <option key={r.id} value={r.id}>
+                {r.name} ({r.category?.name || "General"})
+                {r.capacity ? ` · ${r.capacity} ppl` : ""}
               </option>
             ))}
           </select>
           {selectedResource?.location && (
-            <p className="text-[11px] text-slate-400">
+            <p className="text-[11px] text-slate-400 pl-1">
               Location: {selectedResource.location}
             </p>
           )}
         </div>
 
-        {/* Reservation Title */}
+        {/* Title / Purpose */}
         <div className="space-y-1.5">
-          <label className="text-xs font-semibold text-slate-700 flex items-center gap-1.5">
-            <FileText className="h-3.5 w-3.5 text-slate-400" />
+          <label className="text-xs font-semibold text-slate-800 flex items-center gap-1.5">
+            <FileText className="h-3.5 w-3.5 text-blue-600" />
             Booking Title / Purpose
           </label>
           <Input
@@ -392,14 +561,14 @@ export function ReservationFormModal({
             placeholder="e.g. Sprint Planning, Client Demo, Board Meeting"
             maxLength={120}
             required
-            className="h-10 text-sm"
+            className="text-xs h-10 rounded-xl"
           />
         </div>
 
-        {/* Date Selection */}
+        {/* Date Selector */}
         <div className="space-y-1.5">
-          <label className="text-xs font-semibold text-slate-700 flex items-center gap-1.5">
-            <Calendar className="h-3.5 w-3.5 text-slate-400" />
+          <label className="text-xs font-semibold text-slate-800 flex items-center gap-1.5">
+            <Calendar className="h-3.5 w-3.5 text-blue-600" />
             Date (Asia/Colombo)
           </label>
           <Input
@@ -408,37 +577,24 @@ export function ReservationFormModal({
             min={getColomboTodayString()}
             onChange={(e) => setDate(e.target.value)}
             required
-            className="h-10 text-sm"
+            className="text-xs h-10 rounded-xl"
           />
         </div>
 
-        {/* Time Interval Selection */}
+        {/* Start and End Time Selectors */}
         <div className="grid grid-cols-2 gap-3">
           <div className="space-y-1.5">
-            <label className="text-xs font-semibold text-slate-700 flex items-center gap-1.5">
-              <Clock className="h-3.5 w-3.5 text-slate-400" />
+            <label className="text-xs font-semibold text-slate-800 flex items-center gap-1.5">
+              <Clock className="h-3.5 w-3.5 text-blue-600" />
               Start Time
             </label>
             <select
               value={startTime}
-              onChange={(e) => {
-                const newStart = e.target.value;
-                setStartTime(newStart);
-                // Automatically bump end time if it's earlier or equal
-                if (newStart >= endTime) {
-                  const sIdx = BUSINESS_TIME_SLOTS.indexOf(newStart);
-                  if (sIdx !== -1 && sIdx + 2 < BUSINESS_TIME_SLOTS.length) {
-                    setEndTime(BUSINESS_TIME_SLOTS[sIdx + 2]);
-                  } else if (sIdx !== -1 && sIdx + 1 < BUSINESS_TIME_SLOTS.length) {
-                    setEndTime(BUSINESS_TIME_SLOTS[sIdx + 1]);
-                  }
-                }
-              }}
-              required
-              className="w-full px-3 py-2 text-sm rounded-xl border border-slate-200 bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600 focus:border-transparent transition-all"
+              onChange={(e) => setStartTime(e.target.value)}
+              className="w-full h-10 rounded-xl border border-slate-300 bg-white px-3 text-xs text-slate-800 shadow-2xs focus:outline-none focus:ring-2 focus:ring-blue-600"
             >
               {BUSINESS_TIME_SLOTS.slice(0, -1).map((slot) => (
-                <option key={slot} value={slot}>
+                <option key={`start-${slot}`} value={slot}>
                   {formatSlotLabel(slot)}
                 </option>
               ))}
@@ -446,18 +602,17 @@ export function ReservationFormModal({
           </div>
 
           <div className="space-y-1.5">
-            <label className="text-xs font-semibold text-slate-700 flex items-center gap-1.5">
-              <Clock className="h-3.5 w-3.5 text-slate-400" />
+            <label className="text-xs font-semibold text-slate-800 flex items-center gap-1.5">
+              <Clock className="h-3.5 w-3.5 text-blue-600" />
               End Time
             </label>
             <select
               value={endTime}
               onChange={(e) => setEndTime(e.target.value)}
-              required
-              className="w-full px-3 py-2 text-sm rounded-xl border border-slate-200 bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600 focus:border-transparent transition-all"
+              className="w-full h-10 rounded-xl border border-slate-300 bg-white px-3 text-xs text-slate-800 shadow-2xs focus:outline-none focus:ring-2 focus:ring-blue-600"
             >
-              {BUSINESS_TIME_SLOTS.filter((slot) => slot > startTime).map((slot) => (
-                <option key={slot} value={slot}>
+              {BUSINESS_TIME_SLOTS.slice(1).map((slot) => (
+                <option key={`end-${slot}`} value={slot}>
                   {formatSlotLabel(slot)}
                 </option>
               ))}
@@ -465,35 +620,34 @@ export function ReservationFormModal({
           </div>
         </div>
 
-        {/* Live Conflict Feedback Indicator */}
+        {isInvalidTimeOrder && (
+          <p className="text-xs text-rose-600 font-medium">
+            End time must be later than start time.
+          </p>
+        )}
+
+        {/* Live Conflict Feedback Bar */}
         <div className="pt-1">
-          {isInvalidTimeOrder ? (
-            <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-500 text-xs flex items-center gap-2">
-              <AlertCircle className="h-3.5 w-3.5 text-slate-400" />
-              <span>Ensure the end time is after start time.</span>
-            </div>
-          ) : isCheckingConflict ? (
-            <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-500 text-xs flex items-center gap-2">
+          {isCheckingConflict ? (
+            <div className="flex items-center gap-2 text-xs text-slate-400">
               <Loader2 className="h-3.5 w-3.5 animate-spin text-blue-600" />
-              <span>Checking real-time slot availability...</span>
+              Checking availability...
             </div>
           ) : availabilityStatus === "available" ? (
-            <div className="p-2.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs flex items-center gap-2">
-              <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
-              <span className="font-medium">Time slot is available for booking.</span>
+            <div className="flex items-center gap-1.5 text-xs text-emerald-600 font-medium">
+              <CheckCircle2 className="h-3.5 w-3.5" />
+              Time slot is open and available!
             </div>
           ) : availabilityStatus === "conflict" ? (
-            <div className="p-2.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-xs flex items-start gap-2">
-              <AlertCircle className="h-3.5 w-3.5 text-amber-600 shrink-0 mt-0.5" />
-              <div>
-                <span className="font-semibold">Conflict Detected:</span> This time slot overlaps with an existing reservation or pending request. Choose a different time or resource.
-              </div>
+            <div className="flex items-center gap-1.5 text-xs text-rose-600 font-medium">
+              <AlertCircle className="h-3.5 w-3.5" />
+              This time slot is already requested or reserved.
             </div>
           ) : null}
         </div>
 
         {/* Action Buttons */}
-        <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
+        <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
           <Button
             type="button"
             variant="outline"
@@ -510,7 +664,10 @@ export function ReservationFormModal({
               availabilityStatus === "conflict" ||
               isInvalidTimeOrder ||
               activeResources.length === 0 ||
-              (isAdmin && bookingMode === "behalf" && !targetUserId)
+              (!isAdmin && isAssignmentRequired) ||
+              (isAdmin && adminMode === "self" && isAssignmentRequired) ||
+              (isAdmin && adminMode === "user" && (!targetUserId || !selectedDeptId)) ||
+              (isAdmin && adminMode === "dept" && !selectedDeptId)
             }
             className="rounded-xl text-xs h-9 bg-blue-600 hover:bg-blue-700 text-white font-medium shadow-xs"
           >
@@ -519,8 +676,8 @@ export function ReservationFormModal({
                 <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />
                 Submitting Request...
               </>
-            ) : isAdmin && bookingMode === "behalf" ? (
-              "Confirm & Approve Booking"
+            ) : isAdmin ? (
+              "Confirm & Reserve"
             ) : (
               "Submit Reservation"
             )}
