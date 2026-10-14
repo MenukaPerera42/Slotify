@@ -286,9 +286,9 @@ export function VerifyEmailForm({
     <div className="space-y-5">
       {/* Subtitle & Target Email */}
       <div className="space-y-1">
-        <p className="text-xs sm:text-sm text-slate-500">
+        <p className="text-xs sm:text-sm text-slate-500 break-words">
           Enter the six-digit code sent to{" "}
-          <span className="font-semibold text-slate-800">
+          <span className="font-semibold text-slate-800 break-all">
             {maskEmail(email)}
           </span>
           .
@@ -356,7 +356,7 @@ export function VerifyEmailForm({
           <label className="block text-[11px] font-semibold uppercase tracking-wider text-slate-700 mb-2">
             Verification Code
           </label>
-          <div className="flex items-center justify-between gap-2 sm:gap-2.5">
+          <div className="grid grid-cols-6 gap-1.5 sm:gap-2.5 w-full">
             {digits.map((digit, idx) => (
               <input
                 key={idx}
@@ -373,7 +373,7 @@ export function VerifyEmailForm({
                 onKeyDown={(e) => handleKeyDown(idx, e)}
                 onPaste={handlePaste}
                 disabled={loading}
-                className={`w-11 sm:w-12 h-12 text-center text-lg sm:text-xl font-bold rounded-xl border ${
+                className={`w-full aspect-square max-h-12 text-center text-lg sm:text-xl font-bold rounded-xl border ${
                   digit
                     ? "border-blue-600 bg-blue-50/30 text-blue-900 shadow-2xs"
                     : "border-slate-200 bg-slate-50/50 text-slate-900"

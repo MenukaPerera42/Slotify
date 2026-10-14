@@ -15,14 +15,14 @@ export default async function LoginPage({
   const { created, verified } = await searchParams;
 
   return (
-    <main className="min-h-screen w-full flex flex-col lg:flex-row bg-[#f6f7fb]">
+    <main className="min-h-screen w-full flex flex-col lg:flex-row bg-[#f6f7fb] overflow-x-hidden">
       {/* Left Column: Supplied Artwork (Desktop & Tablet) */}
       <section className="hidden lg:flex lg:w-[50%] xl:w-[54%] items-center justify-center bg-[#f6f7fb]">
         <AuthArtPanel />
       </section>
 
       {/* Right Column: Clean, Minimal Login Form */}
-      <section className="w-full lg:w-[50%] xl:w-[46%] bg-white flex flex-col justify-between p-6 sm:p-10 lg:p-12 xl:p-16 min-h-screen shadow-sm z-10">
+      <section className="w-full lg:w-[50%] xl:w-[46%] bg-white flex flex-col justify-between p-6 sm:p-10 lg:p-12 xl:p-16 min-h-screen shadow-sm z-10 min-w-0">
         {/* Top Header: Logo linking to / (No Home button) */}
         <div className="flex items-center pb-6 sm:pb-8">
           <Link
@@ -35,7 +35,7 @@ export default async function LoginPage({
         </div>
 
         {/* Center: Minimal Auth Box */}
-        <div className="my-auto py-6 max-w-sm sm:max-w-md w-full mx-auto space-y-6">
+        <div className="my-auto py-6 w-full max-w-sm sm:max-w-md mx-auto space-y-6 min-w-0">
           <div className="space-y-2">
             <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-900">
               Welcome Back
