@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { createHmac, randomBytes } from "node:crypto";
+import { randomBytes } from "node:crypto";
 import { PrismaClient } from "@prisma/client";
 import { hash, verify } from "argon2";
 
@@ -41,12 +41,6 @@ function ok(result, label) {
 function errorCode(result, code) {
   assert.equal(result.success, false, JSON.stringify(result));
   assert.equal(result.code, code, JSON.stringify(result));
-}
-async function codeFor(challengeId) {
-  const challenge = await prisma.emailVerificationChallenge.findUniqueOrThrow({ where: { id: challengeId } });
-  const digest = createHmac("sha256", process.env.AUTH_SECRET)
-    .update(`slotify-mock-otp:${challenge.id}:${challenge.resendCount}`).digest("hex");
-  return (BigInt(`0x${digest}`) % BigInt(1_000_000)).toString().padStart(6, "0");
 }
 
 try {
@@ -107,9 +101,8 @@ try {
   assert.notEqual(storedMember.passwordHash, password);
   assert.equal(await verify(storedMember.passwordHash, password), true);
   assert.equal(storedMember.emailVerifiedAt, null);
-  const registrationChallenge = await prisma.emailVerificationChallenge.findFirstOrThrow({ where: { userId: newMember.id, purpose: "REGISTRATION", consumedAt: null } });
-  ok(await action("verifyRegistrationOtpAction", [{ challengeId: registrationChallenge.id, code: await codeFor(registrationChallenge.id) }]));
-  await login(managedEmail, `198.18.3.${randomBytes(1)[0] || 1}`);
+  assert.equal(storedMember.emailVerificationRequiredAt, null);
+  const managedJar = await login(managedEmail, `198.18.3.${randomBytes(1)[0] || 1}`);
   errorCode(await action("createMemberAction", [{
     firstName: "Duplicate", lastName: "Person", email: managedEmail.toUpperCase(),
     departmentId: departmentA.id, initialPassword: password,
@@ -117,20 +110,17 @@ try {
   pass("admin creates a member with Argon2id and duplicate-email protection");
 
   const changedEmail = `stage7a-renamed-${tag}@test.local`;
-  errorCode(await action("updateUserProfileAction", [{ userId: newMember.id, email: changedEmail }], adminJar), "EMAIL_VERIFICATION_REQUIRED");
   const updated = ok(await action("updateUserProfileAction", [{
-    userId: newMember.id, firstName: "Grace", lastName: "Hopper",
+    userId: newMember.id, firstName: "Grace", lastName: "Hopper", email: changedEmail,
   }], adminJar), "update profile");
   assert.equal(updated.displayName, "Grace Hopper");
   assert.equal(updated.name, "Grace Hopper");
-  assert.equal(updated.email, managedEmail);
-  const pendingEmailChange = ok(await action("requestAdminEmailChangeAction", [{ userId: newMember.id, newEmail: changedEmail }], adminJar));
-  assert.equal((await prisma.user.findUniqueOrThrow({ where: { id: newMember.id } })).email, managedEmail);
-  ok(await action("verifyPendingEmailChangeAction", [{ challengeId: pendingEmailChange.challengeId, code: await codeFor(pendingEmailChange.challengeId) }]));
+  assert.equal(updated.email, changedEmail);
   assert.equal((await prisma.user.findUniqueOrThrow({ where: { id: newMember.id } })).email, changedEmail);
+  errorCode(await action("getMyDepartmentAction", [], managedJar), "UNAUTHENTICATED");
   const changedJar = await login(changedEmail, `198.18.3.${randomBytes(1)[0] || 1}`);
   assert.equal(ok(await action("getMyDepartmentAction", [], changedJar), "session after email edit").department.id, departmentA.id);
-  errorCode(await action("requestAdminEmailChangeAction", [{ userId: newMember.id, newEmail: member.email }], adminJar), "EMAIL_IN_USE");
+  errorCode(await action("updateUserProfileAction", [{ userId: newMember.id, email: member.email }], adminJar), "EMAIL_CONFLICT");
   errorCode(await action("updateUserProfileAction", [{ userId: legacy.id, firstName: "Unsafe" }], adminJar), "NAME_PAIR_REQUIRED");
   ok(await action("assignUserDepartmentAction", [{ userId: newMember.id, departmentId: departmentB.id }], adminJar), "assign department");
   assert.equal((await prisma.user.findUniqueOrThrow({ where: { id: newMember.id } })).departmentId, departmentB.id);

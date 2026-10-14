@@ -9,8 +9,6 @@ import {
   updateUserProfileSchema, userIdSchema,
 } from "../schemas/admin-user-schema";
 import { AdminUserError, type AdminUserResult } from "../types";
-import { EmailDeliveryError } from "@/features/email-verification/lib/email-delivery";
-import { VerificationError } from "@/features/email-verification/service";
 import { createMember, getUserDetail, listUsers, setUserActive, setUserRole, updateUserProfile } from "../services/admin-user-service";
 
 async function run<T>(work: () => Promise<T>): Promise<AdminUserResult<T>> {
@@ -24,10 +22,6 @@ async function run<T>(work: () => Promise<T>): Promise<AdminUserResult<T>> {
     if (error instanceof z.ZodError) return { success: false, code: "INVALID_INPUT", error: "Check the submitted fields.",
       fieldErrors: error.flatten().fieldErrors as Record<string, string[]> };
     if (error instanceof AdminUserError) return { success: false, code: error.code, error: error.message };
-    if (error instanceof VerificationError && error.code === "EMAIL_IN_USE") return { success: false, code: "EMAIL_CONFLICT", error: error.message };
-    if (error instanceof EmailDeliveryError) return { success: false, code: error.code,
-      error: error.code === "EMAIL_CONFIGURATION_ERROR" ? "Email delivery is not configured. Set RESEND_API_KEY and a verified RESEND_FROM_EMAIL."
-        : "Unable to send the verification email. Try again later." };
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
       return { success: false, code: "EMAIL_CONFLICT", error: "An account with that email already exists." };
     }

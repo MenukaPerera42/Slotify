@@ -3,9 +3,13 @@ import { uuid } from "./reservation-schema";
 
 export const correctReservationDepartmentSchema = z.strictObject({
   reservationId: uuid,
-  expectedDepartmentId: uuid.nullable(),
+  // Older timeline clients omit this field for unassigned legacy bookings.
+  // Treat omission as an expected NULL only; the service still rejects a
+  // concurrently assigned reservation with STALE_DEPARTMENT.
+  expectedDepartmentId: uuid.nullable().optional().default(null),
   departmentId: uuid,
-  reason: z.string().trim().min(10).max(500),
+  reason: z.string().trim().min(10, "Enter a correction reason of at least 10 characters.")
+    .max(500, "Keep the correction reason within 500 characters."),
 });
 
 export const unassignedReservationsSchema = z.strictObject({

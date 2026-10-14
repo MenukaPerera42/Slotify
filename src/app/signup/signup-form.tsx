@@ -1,8 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useActionState, useEffect, useState } from "react";
+import { useActionState, useState } from "react";
 import { signupAction, type SignupState } from "./actions";
 import {
   Eye,
@@ -23,31 +22,18 @@ export function SignupForm({
 }: {
   departments: { id: string; name: string; code: string }[];
 }) {
-  const router = useRouter();
   const [state, action, pending] = useActionState(signupAction, initialState);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-
-  useEffect(() => {
-    if (state.verification?.nextPath) {
-      router.push(state.verification.nextPath);
-    }
-  }, [state.verification, router]);
 
   return (
     <form action={action} className="space-y-3">
       {state.message && (
         <div
           role="alert"
-          className={`rounded-xl p-2.5 text-xs flex items-start gap-2 ${
-            state.verification
-              ? "bg-emerald-50 border border-emerald-200/80 text-emerald-800"
-              : "bg-rose-50 border border-rose-200/80 text-rose-700"
-          }`}
+          className="rounded-xl p-2.5 text-xs flex items-start gap-2 bg-rose-50 border border-rose-200/80 text-rose-700"
         >
-          <span className="font-semibold shrink-0">
-            {state.verification ? "Success:" : "Notice:"}
-          </span>
+          <span className="font-semibold shrink-0">Notice:</span>
           <span>{state.message}</span>
         </div>
       )}

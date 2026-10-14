@@ -43,6 +43,7 @@ Every action returns `Promise<NotificationResult<T>>`:
   ```
 - **Access**: Current authenticated user (MEMBER or ADMIN).
 - **Behavior**: Scoped strictly to `recipientUserId === session.user.id`. Ordered by `createdAt DESC`.
+- **Read semantics**: Listing and `listNotificationHistoryAction` are read-only. Opening a linked reservation through `getReservationAction` or the `View` link does not update `isRead`.
 - **Success `data`**:
   ```ts
   {
@@ -84,12 +85,14 @@ Every action returns `Promise<NotificationResult<T>>`:
 - **Behavior**: Atomically updates `isRead: true` and `readAt: now()` where `id === input.id AND recipientUserId === session.user.id`.
 - **Security Guard**: If the notification ID belongs to another user or does not exist, returns `{ success: false, code: "NOTIFICATION_NOT_FOUND" }`. It never reveals or alters foreign records.
 - **Success `data`**: Updated Notification record.
+- **Idempotency**: Repeating the action on an already-read notification succeeds without changing its original `readAt`.
 
 ### `markAllNotificationsAsReadAction`
 - **Input**: None (`void`).
 - **Access**: Current authenticated user.
 - **Behavior**: Marks all unread notifications for the caller as read.
 - **Success `data`**: `{ count: number }`.
+- **Idempotency**: A repeat request returns `{ count: 0 }`. Only the caller's unread rows are updated.
 
 ### `listNotificationHistoryAction`
 - **Input**: Same as `listNotificationsAction`.

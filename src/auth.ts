@@ -44,8 +44,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         const user = await prisma.user.findUnique({ where: { email: parsed.data.email } });
         const hashToCheck = user?.passwordHash ?? await dummyHash;
         const validPassword = await verify(hashToCheck, parsed.data.password);
-        if (!user?.isActive || !user.passwordHash || !validPassword
-          || (user.emailVerificationRequiredAt && !user.emailVerifiedAt)) return null;
+        if (!user?.isActive || !user.passwordHash || !validPassword) return null;
         return { id: user.id, name: user.name, email: user.email, sessionVersion: user.sessionVersion };
       },
     }),

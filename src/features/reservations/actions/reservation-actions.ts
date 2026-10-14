@@ -11,6 +11,10 @@ import { correctReservationDepartmentSchema, unassignedReservationsSchema } from
 import { correctReservationDepartment, listReservationDepartmentCorrections, listUnassignedReservations } from "../services/reservation-department-correction-service";
 import { currentUser } from "@/lib/authorization";
 
+class ReservationInputError extends Error {
+  constructor(message: string, readonly fieldErrors: Record<string, string[]>) { super(message); }
+}
+
 async function requireAdminForCorrection() {
   const actor = await currentUser();
   if (!actor) throw new ReservationError("UNAUTHENTICATED", "Sign in with an active account to continue.");
@@ -42,6 +46,9 @@ function databaseCode(error: unknown): string | undefined {
 async function run<T>(operation: () => Promise<T>): Promise<ReservationResult<T>> {
   try { return { success: true, data: await operation() }; }
   catch (error) {
+    if (error instanceof ReservationInputError) return {
+      success: false, code: "INVALID_INPUT", error: error.message, fieldErrors: error.fieldErrors,
+    };
     if (error instanceof z.ZodError) return {
       success: false, code: "INVALID_INPUT", error: "Check the submitted fields.",
       fieldErrors: error.flatten().fieldErrors as Record<string, string[]>,
@@ -121,7 +128,12 @@ export async function listReservationDepartmentCorrectionsAction(id: unknown) {
 export async function correctReservationDepartmentAction(input: unknown) {
   return run(async () => {
     await requireAdminForCorrection();
-    const result = await correctReservationDepartment(correctReservationDepartmentSchema.parse(input));
+    const parsed = correctReservationDepartmentSchema.safeParse(input);
+    if (!parsed.success) {
+      const fieldErrors = parsed.error.flatten().fieldErrors as Record<string, string[]>;
+      throw new ReservationInputError(parsed.error.issues[0]?.message ?? "Check the submitted fields.", fieldErrors);
+    }
+    const result = await correctReservationDepartment(parsed.data);
     refresh();
     revalidatePath("/administration");
     return result;
