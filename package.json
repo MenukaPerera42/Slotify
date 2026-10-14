@@ -9,6 +9,7 @@
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
     "test:auth": "node --env-file=.env tests/auth-stage41.mjs",
+    "test:email-verification": "node --env-file=.env tests/email-verification-stage7c3a.mjs",
     "test:reservations": "node --env-file=.env --import tsx tests/reservations-stage5a.mjs",
     "test:notifications": "node --env-file=.env tests/notifications-stage5e.mjs",
     "test:departments": "node --env-file=.env --import tsx tests/departments-stage6a.mjs",

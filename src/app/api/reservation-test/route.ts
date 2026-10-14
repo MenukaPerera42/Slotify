@@ -6,8 +6,11 @@ import * as departmentActions from "@/features/departments/actions/department-ac
 import * as dashboardActions from "@/features/dashboard/actions/dashboard-actions";
 import * as adminUserActions from "@/features/admin-users/actions/admin-user-actions";
 import * as officeShiftActions from "@/features/office-shifts/actions/office-shift-actions";
+import * as emailVerificationActions from "@/features/email-verification/actions";
+import { registerUnverifiedMemberAction } from "@/app/signup/actions";
 
-const actionRegistry = { ...actions, ...resourceActions, ...notificationActions, ...departmentActions, ...dashboardActions, ...adminUserActions, ...officeShiftActions };
+const actionRegistry = { ...actions, ...resourceActions, ...notificationActions, ...departmentActions, ...dashboardActions, ...adminUserActions, ...officeShiftActions,
+  ...emailVerificationActions, registerUnverifiedMemberAction };
 
 // Integration harness only. It is inert unless explicitly enabled in a local test server.
 export async function POST(request: Request) {

@@ -4,7 +4,7 @@
 
 `User.firstName` and `User.lastName` are nullable for legacy rows. The migration leaves existing `User.name`, account IDs, credentials, departments and reservations unchanged. No automatic name split is safe: a one-word or ambiguous historical display name remains exactly as stored. New public signups and admin-created members require both names; the server stores the joined name in the legacy `name` column. User management DTOs return `displayName` from both structured names when present, otherwise from the original `name`.
 
-The existing signup form currently posts a single `name` field. Stage 7B must replace it with `firstName` and `lastName` form fields. The Stage 7A signup action intentionally rejects missing structured names. Submit `email`, `password`, `confirmPassword`, and an active `departmentId` as before. Signup still creates only MEMBER accounts and uses the existing password policy, Argon2id, rate limits, and email normalization.
+The signup form posts `firstName`, `lastName`, `email`, `password`, `confirmPassword`, and an active `departmentId`. Signup creates only unverified MEMBER accounts; Stage 7C.3A verification is required before login. See [email verification contract](email-verification-api-contract.md).
 
 ## Result and user DTO
 
@@ -38,8 +38,8 @@ Import from `@/features/admin-users/actions/admin-user-actions`. The services al
 | --- | --- | --- |
 | `listManagedUsersAction(input?: { search?: string; role?: "ADMIN" \| "MEMBER"; isActive?: boolean; page?: number; pageSize?: number })` | `Page<ManagedUser>` | Defaults: page 1, pageSize 50; search covers name and email. |
 | `getManagedUserAction(userId: string)` | `ManagedUser` | Returns `USER_NOT_FOUND` for missing ID. |
-| `createMemberAction(input: { firstName: string; lastName: string; email: string; departmentId: string; initialPassword: string })` | `ManagedUser` | Always creates MEMBER. Department must be active. |
-| `updateUserProfileAction(input: { userId: string; firstName?: string; lastName?: string; email?: string })` | `ManagedUser` | At least one edit. Legacy rows need both names when first adding structured names. Email-only edit leaves the legacy name intact. |
+| `createMemberAction(input: { firstName: string; lastName: string; email: string; departmentId: string; initialPassword: string })` | `ManagedUser` | Always creates unverified MEMBER and emails a registration OTP. Department must be active. |
+| `updateUserProfileAction(input: { userId: string; firstName?: string; lastName?: string; email?: string })` | `ManagedUser` | Name edits only. A changed email returns `EMAIL_VERIFICATION_REQUIRED`; use `requestAdminEmailChangeAction` and `verifyPendingEmailChangeAction`. Legacy rows need both names when first adding structured names. |
 | `setUserRoleAction(input: { userId: string; role: "ADMIN" \| "MEMBER" })` | `ManagedUser` | An admin cannot change their own role; last active admin is protected. |
 | `setUserActiveAction(input: { userId: string; isActive: boolean })` | `ManagedUser` | An admin cannot deactivate self; activation needs an active department. |
 
@@ -47,7 +47,7 @@ Existing department assignment remains `assignUserDepartmentAction({ userId, dep
 
 Management error codes: `UNAUTHENTICATED`, `FORBIDDEN`, `INVALID_INPUT`, `USER_NOT_FOUND`, `EMAIL_CONFLICT`, `DEPARTMENT_NOT_FOUND`, `DEPARTMENT_INACTIVE`, `DEPARTMENT_REQUIRED`, `NAME_PAIR_REQUIRED`, `LAST_ACTIVE_ADMIN`, `SELF_ROLE_CHANGE`, `SELF_DEACTIVATION`, `DATABASE_ERROR`. `INVALID_INPUT` may include `fieldErrors`. Department assignment retains the existing department action result/error type.
 
-Mutations revalidate `/administration`, `/dashboard`, and `/reservations`; department assignment uses its existing revalidation. Refresh client state after a mutation before showing a changed list or profile. The signed-in user's lookup uses the session user ID, so changing their email does not invalidate that session.
+Mutations revalidate `/administration`, `/dashboard`, and `/reservations`; department assignment uses its existing revalidation. Refresh client state after a mutation before showing a changed list or profile. A verified email change increments `sessionVersion`, invalidating prior sessions on their next authorization check.
 
 ## Reviewed reservation department correction
 

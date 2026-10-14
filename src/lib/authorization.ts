@@ -8,8 +8,11 @@ export async function currentUser() {
   if (!session?.user?.id && !session?.user?.email) return null;
   return prisma.user.findUnique({
     where: session.user.id ? { id: session.user.id } : { email: session.user.email! },
-    select: { id: true, name: true, firstName: true, lastName: true, email: true, role: true, isActive: true, departmentId: true },
-  }).then((user) => user?.isActive ? user : null);
+    select: { id: true, name: true, firstName: true, lastName: true, email: true, role: true, isActive: true,
+      departmentId: true, emailVerifiedAt: true, emailVerificationRequiredAt: true, sessionVersion: true },
+  }).then((user) => user?.isActive
+    && (!user.emailVerificationRequiredAt || user.emailVerifiedAt)
+    && user.sessionVersion === (session.sessionVersion ?? 0) ? user : null);
 }
 
 export async function requireUser() {

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { randomBytes } from "node:crypto";
+import { createHmac, randomBytes } from "node:crypto";
 import { PrismaClient } from "@prisma/client";
 import { hash, verify } from "argon2";
 
@@ -41,6 +41,12 @@ function ok(result, label) {
 function errorCode(result, code) {
   assert.equal(result.success, false, JSON.stringify(result));
   assert.equal(result.code, code, JSON.stringify(result));
+}
+async function codeFor(challengeId) {
+  const challenge = await prisma.emailVerificationChallenge.findUniqueOrThrow({ where: { id: challengeId } });
+  const digest = createHmac("sha256", process.env.AUTH_SECRET)
+    .update(`slotify-mock-otp:${challenge.id}:${challenge.resendCount}`).digest("hex");
+  return (BigInt(`0x${digest}`) % BigInt(1_000_000)).toString().padStart(6, "0");
 }
 
 try {
@@ -100,7 +106,10 @@ try {
   assert.ok(storedMember.passwordHash.startsWith("$argon2id$"));
   assert.notEqual(storedMember.passwordHash, password);
   assert.equal(await verify(storedMember.passwordHash, password), true);
-  const managedJar = await login(managedEmail, `198.18.3.${randomBytes(1)[0] || 1}`);
+  assert.equal(storedMember.emailVerifiedAt, null);
+  const registrationChallenge = await prisma.emailVerificationChallenge.findFirstOrThrow({ where: { userId: newMember.id, purpose: "REGISTRATION", consumedAt: null } });
+  ok(await action("verifyRegistrationOtpAction", [{ challengeId: registrationChallenge.id, code: await codeFor(registrationChallenge.id) }]));
+  await login(managedEmail, `198.18.3.${randomBytes(1)[0] || 1}`);
   errorCode(await action("createMemberAction", [{
     firstName: "Duplicate", lastName: "Person", email: managedEmail.toUpperCase(),
     departmentId: departmentA.id, initialPassword: password,
@@ -108,14 +117,20 @@ try {
   pass("admin creates a member with Argon2id and duplicate-email protection");
 
   const changedEmail = `stage7a-renamed-${tag}@test.local`;
+  errorCode(await action("updateUserProfileAction", [{ userId: newMember.id, email: changedEmail }], adminJar), "EMAIL_VERIFICATION_REQUIRED");
   const updated = ok(await action("updateUserProfileAction", [{
-    userId: newMember.id, firstName: "Grace", lastName: "Hopper", email: changedEmail,
+    userId: newMember.id, firstName: "Grace", lastName: "Hopper",
   }], adminJar), "update profile");
   assert.equal(updated.displayName, "Grace Hopper");
   assert.equal(updated.name, "Grace Hopper");
-  assert.equal(updated.email, changedEmail);
-  assert.equal(ok(await action("getMyDepartmentAction", [], managedJar), "session after email edit").department.id, departmentA.id);
-  errorCode(await action("updateUserProfileAction", [{ userId: newMember.id, email: member.email }], adminJar), "EMAIL_CONFLICT");
+  assert.equal(updated.email, managedEmail);
+  const pendingEmailChange = ok(await action("requestAdminEmailChangeAction", [{ userId: newMember.id, newEmail: changedEmail }], adminJar));
+  assert.equal((await prisma.user.findUniqueOrThrow({ where: { id: newMember.id } })).email, managedEmail);
+  ok(await action("verifyPendingEmailChangeAction", [{ challengeId: pendingEmailChange.challengeId, code: await codeFor(pendingEmailChange.challengeId) }]));
+  assert.equal((await prisma.user.findUniqueOrThrow({ where: { id: newMember.id } })).email, changedEmail);
+  const changedJar = await login(changedEmail, `198.18.3.${randomBytes(1)[0] || 1}`);
+  assert.equal(ok(await action("getMyDepartmentAction", [], changedJar), "session after email edit").department.id, departmentA.id);
+  errorCode(await action("requestAdminEmailChangeAction", [{ userId: newMember.id, newEmail: member.email }], adminJar), "EMAIL_IN_USE");
   errorCode(await action("updateUserProfileAction", [{ userId: legacy.id, firstName: "Unsafe" }], adminJar), "NAME_PAIR_REQUIRED");
   ok(await action("assignUserDepartmentAction", [{ userId: newMember.id, departmentId: departmentB.id }], adminJar), "assign department");
   assert.equal((await prisma.user.findUniqueOrThrow({ where: { id: newMember.id } })).departmentId, departmentB.id);
@@ -134,7 +149,11 @@ try {
   const date = new Date();
   date.setUTCDate(date.getUTCDate() + 14);
   const day = date.toISOString().slice(0, 10);
-  const slot = { startTime: `${day}T10:00:00+05:30`, endTime: `${day}T11:00:00+05:30` };
+  const hours = ok(await action("getEffectiveSchedulingHoursAction", [{ date: day, resourceId: resource.id }], memberJar), "booking hours");
+  assert.ok(hours.durationMinutes >= 120, "Admin test requires a two-hour active booking window");
+  const localMidnight = Date.parse(`${day}T00:00:00+05:30`);
+  const atMinute = (minute) => new Date(localMidnight + minute * 60_000).toISOString();
+  const slot = { startTime: atMinute(hours.startMinute), endTime: atMinute(hours.startMinute + 60) };
   const booking = ok(await action("createReservationAction", [{ resourceId: resource.id, title: `Stage7A Booking ${tag}`, ...slot }], memberJar), "member booking");
   created.reservations.push(booking.id);
   assert.equal(booking.departmentId, departmentA.id);
@@ -170,7 +189,7 @@ try {
   }], adminJar), "DEPARTMENT_UNCHANGED");
   const departmentOnly = ok(await action("createAdminReservationAction", [{
     resourceId: resource.id, departmentId: departmentA.id, title: `Stage7A Department Only ${tag}`,
-    startTime: `${day}T11:00:00+05:30`, endTime: `${day}T12:00:00+05:30`,
+    startTime: atMinute(hours.startMinute + 60), endTime: atMinute(hours.startMinute + 120),
   }], adminJar), "department-only booking");
   created.reservations.push(departmentOnly.id);
   assert.equal(departmentOnly.userId, null);

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { randomBytes } from "node:crypto";
+import { createHmac, randomBytes } from "node:crypto";
 import { createRequire } from "node:module";
 import { PrismaClient } from "@prisma/client";
 
@@ -64,6 +64,15 @@ async function page(path, jar = {}) {
   return fetch(`${base}${path}`, { redirect: "manual", headers: { Cookie: cookieHeader(jar) } });
 }
 function pass(label) { console.log(`PASS ${label}`); }
+async function verifyRegistration(email) {
+  const user = await prisma.user.findUniqueOrThrow({ where: { email } });
+  const challenge = await prisma.emailVerificationChallenge.findFirstOrThrow({ where: { userId: user.id, purpose: "REGISTRATION", consumedAt: null } });
+  const digest = createHmac("sha256", process.env.AUTH_SECRET).update(`slotify-mock-otp:${challenge.id}:${challenge.resendCount}`).digest("hex");
+  const code = (BigInt(`0x${digest}`) % BigInt(1_000_000)).toString().padStart(6, "0");
+  const response = await fetch(`${base}/api/reservation-test`, { method: "POST", headers: { Origin: base, "Content-Type": "application/json" },
+    body: JSON.stringify({ name: "verifyRegistrationOtpAction", args: [{ challengeId: challenge.id, code }] }) });
+  assert.equal((await response.json()).success, true);
+}
 
 try {
   const signupDepartment = await prisma.department.findUniqueOrThrow({ where: { code: "ENG" } });
@@ -94,21 +103,22 @@ try {
   pass("invalid email, weak password (<6 chars), mismatch");
 
   // Verify 6-character password is accepted
-  const sixCharPass = "pass12";
+  const sixCharPass = "abc@12";
   const sixCharEmail = `stage42-six-${stamp}@example.test`;
   testEmails.push(sixCharEmail);
   const sixCharSignup = await signup({ firstName: "Six Char", lastName: "Member", email: sixCharEmail, password: sixCharPass, confirmPassword: sixCharPass, departmentId: signupDepartment.id }, "192.0.2.115");
-  assert.match(sixCharSignup.response.headers.get("x-action-redirect") ?? sixCharSignup.response.headers.get("location") ?? "", /\/login\?created=1/);
+  assert.match(sixCharSignup.text, /Check your email/);
   const sixCharUser = await prisma.user.findUniqueOrThrow({ where: { email: sixCharEmail } });
   assert.equal(sixCharUser.role, "MEMBER");
   assert.equal(sixCharUser.departmentId, signupDepartment.id);
   assert.equal(sixCharUser.firstName, "Six Char");
   assert.equal(sixCharUser.lastName, "Member");
   assert.ok(sixCharUser.passwordHash?.startsWith("$argon2id$"));
+  await verifyRegistration(sixCharEmail);
   pass("6-character password passes signup validation and creates MEMBER account");
 
   const created = await signup({ ...fields, email: `  ${memberEmail.toUpperCase()}  `, role: "ADMIN" }, "192.0.2.103");
-  assert.match(created.response.headers.get("x-action-redirect") ?? created.response.headers.get("location") ?? "", /\/login\?created=1/);
+  assert.match(created.text, /Check your email/);
   const newUser = await prisma.user.findUniqueOrThrow({ where: { email: memberEmail } });
   assert.equal(newUser.role, "MEMBER");
   assert.equal(newUser.departmentId, signupDepartment.id);
@@ -116,6 +126,7 @@ try {
   assert.equal(newUser.lastName, "Member");
   assert.equal(newUser.name, "Stage Test Member");
   assert.ok(newUser.passwordHash?.startsWith("$argon2id$"));
+  assert.equal(newUser.emailVerifiedAt, null);
   pass("signup normalizes email, hashes password, ignores injected ADMIN role");
 
   await assert.rejects(
@@ -125,17 +136,20 @@ try {
   pass("database rejects case-variant duplicate email");
 
   const duplicate = await signup(fields, "192.0.2.104");
-  assert.match(duplicate.text, /Unable to create an account/);
+  assert.match(duplicate.text, /already in use/);
   assert.equal(await prisma.user.count({ where: { email: memberEmail } }), 1);
   const concurrent = await Promise.all([
     signup({ ...fields, email: raceEmail }, "192.0.2.105"),
     signup({ ...fields, email: raceEmail, role: "ADMIN" }, "192.0.2.106"),
   ]);
   assert.equal(await prisma.user.count({ where: { email: raceEmail } }), 1);
-  assert.equal(concurrent.filter(({ text }) => text.includes("Unable to create an account")).length, 1);
+  assert.equal(concurrent.filter(({ text }) => text.includes("already in use") || text.includes("Unable to complete verification")).length, 1);
   assert.equal((await prisma.user.findUniqueOrThrow({ where: { email: raceEmail } })).role, "MEMBER");
   pass("duplicate and concurrent duplicate registration");
 
+  const unverified = await login(memberEmail, password, "192.0.2.107");
+  assert.match(unverified.response.headers.get("location") ?? "", /error=CredentialsSignin/);
+  await verifyRegistration(memberEmail);
   const member = await login(memberEmail, password, "192.0.2.107");
   assert.equal(member.response.status, 302);
   assert.match(member.response.headers.get("location") ?? "", /dashboard/);

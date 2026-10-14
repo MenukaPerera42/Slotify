@@ -6,6 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { AdminUserError } from "../types";
 import type { CreateMemberInput, ListUsersInput, UpdateUserProfileInput } from "../schemas/admin-user-schema";
 import { displayName } from "../utils/display-name";
+import { createChallenge, ensureEmailAvailable } from "@/features/email-verification/service";
 
 const userSelect = {
   id: true, firstName: true, lastName: true, name: true, email: true, role: true,
@@ -59,12 +60,15 @@ export async function createMember(input: CreateMemberInput) {
       SELECT id, "isActive" FROM departments WHERE id = ${input.departmentId}::uuid FOR SHARE`;
     if (!departments[0]) throw new AdminUserError("DEPARTMENT_NOT_FOUND", "Department not found.");
     if (!departments[0].isActive) throw new AdminUserError("DEPARTMENT_INACTIVE", "Department is inactive.");
+    await ensureEmailAvailable(tx, input.email);
     const user = await tx.user.create({ data: {
       firstName: input.firstName, lastName: input.lastName, name: `${input.firstName} ${input.lastName}`,
       email: input.email, departmentId: input.departmentId, passwordHash, role: "MEMBER",
+      emailVerificationRequiredAt: new Date(),
     }, select: userSelect });
+    await createChallenge(tx, user.id, input.email, "REGISTRATION");
     return withDisplayName(user);
-  });
+  }, { timeout: 15_000 });
 }
 
 export async function updateUserProfile(input: UpdateUserProfileInput) {
@@ -73,7 +77,10 @@ export async function updateUserProfile(input: UpdateUserProfileInput) {
     const locked = await tx.$queryRaw<Array<{ id: string }>>`
       SELECT id FROM users WHERE id = ${input.userId}::uuid FOR UPDATE`;
     if (!locked[0]) throw new AdminUserError("USER_NOT_FOUND", "User not found.");
-    const existing = await tx.user.findUniqueOrThrow({ where: { id: input.userId }, select: { firstName: true, lastName: true } });
+    const existing = await tx.user.findUniqueOrThrow({ where: { id: input.userId }, select: { firstName: true, lastName: true, email: true } });
+    if (input.email !== undefined && input.email !== existing.email) {
+      throw new AdminUserError("EMAIL_VERIFICATION_REQUIRED", "Request and verify the new email address before updating it.");
+    }
     const firstName = input.firstName ?? existing.firstName;
     const lastName = input.lastName ?? existing.lastName;
     if ((input.firstName !== undefined || input.lastName !== undefined) && (!firstName || !lastName)) {
@@ -82,7 +89,6 @@ export async function updateUserProfile(input: UpdateUserProfileInput) {
     const user = await tx.user.update({ where: { id: input.userId }, data: {
       ...(input.firstName !== undefined || input.lastName !== undefined
         ? { firstName, lastName, name: `${firstName} ${lastName}` } : {}),
-      ...(input.email !== undefined ? { email: input.email } : {}),
     }, select: userSelect });
     return withDisplayName(user);
   });

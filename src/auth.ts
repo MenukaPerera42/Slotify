@@ -19,10 +19,12 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   callbacks: {
     jwt({ token, user }) {
       if (user?.id) token.sub = user.id;
+      if (user) token.sessionVersion = user.sessionVersion ?? 0;
       return token;
     },
     session({ session, token }) {
       if (session.user && token.sub) session.user.id = token.sub;
+      session.sessionVersion = typeof token.sessionVersion === "number" ? token.sessionVersion : 0;
       return session;
     },
   },
@@ -42,8 +44,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         const user = await prisma.user.findUnique({ where: { email: parsed.data.email } });
         const hashToCheck = user?.passwordHash ?? await dummyHash;
         const validPassword = await verify(hashToCheck, parsed.data.password);
-        if (!user?.isActive || !user.passwordHash || !validPassword) return null;
-        return { id: user.id, name: user.name, email: user.email };
+        if (!user?.isActive || !user.passwordHash || !validPassword
+          || (user.emailVerificationRequiredAt && !user.emailVerifiedAt)) return null;
+        return { id: user.id, name: user.name, email: user.email, sessionVersion: user.sessionVersion };
       },
     }),
   ],

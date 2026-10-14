@@ -34,6 +34,11 @@ enum OfficeShiftMode {
   CUSTOM
 }
 
+enum EmailChallengePurpose {
+  REGISTRATION
+  EMAIL_CHANGE
+}
+
 model User {
   id           String        @id @default(uuid()) @db.Uuid
   name         String
@@ -43,6 +48,9 @@ model User {
   role         UserRole      @default(MEMBER)
   passwordHash String?
   isActive     Boolean       @default(true)
+  emailVerifiedAt DateTime?   @db.Timestamptz(3)
+  emailVerificationRequiredAt DateTime? @db.Timestamptz(3)
+  sessionVersion Int          @default(0)
   departmentId String?       @db.Uuid
   createdAt    DateTime      @default(now()) @db.Timestamptz(3)
   updatedAt    DateTime      @updatedAt @db.Timestamptz(3)
@@ -52,10 +60,34 @@ model User {
   actedNotifications    Notification[] @relation("NotificationActor")
   departmentCorrections ReservationDepartmentCorrection[] @relation("DepartmentCorrectionActor")
   updatedOfficeShifts OfficeShift[] @relation("OfficeShiftUpdater")
+  emailChallenges EmailVerificationChallenge[] @relation("EmailChallengeSubject")
+  initiatedEmailChallenges EmailVerificationChallenge[] @relation("EmailChallengeInitiator")
   department            Department? @relation(fields: [departmentId], references: [id], onDelete: Restrict)
 
   @@index([departmentId])
   @@map("users")
+}
+
+model EmailVerificationChallenge {
+  id                String                @id @default(uuid()) @db.Uuid
+  userId            String                @db.Uuid
+  initiatedByUserId String?               @db.Uuid
+  purpose           EmailChallengePurpose
+  targetEmail       String
+  codeHash          String
+  expiresAt         DateTime              @db.Timestamptz(3)
+  attemptsRemaining Int                   @default(5)
+  resendCount       Int                   @default(0)
+  lastSentAt        DateTime              @db.Timestamptz(3)
+  consumedAt        DateTime?             @db.Timestamptz(3)
+  createdAt         DateTime              @default(now()) @db.Timestamptz(3)
+  updatedAt         DateTime              @updatedAt @db.Timestamptz(3)
+  user              User                  @relation("EmailChallengeSubject", fields: [userId], references: [id], onDelete: Cascade)
+  initiatedBy       User?                 @relation("EmailChallengeInitiator", fields: [initiatedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([userId, purpose, createdAt])
+  @@index([targetEmail])
+  @@map("email_verification_challenges")
 }
 
 model OfficeShift {
