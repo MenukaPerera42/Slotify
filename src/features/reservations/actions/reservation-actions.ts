@@ -7,6 +7,15 @@ import {
 } from "../schemas/reservation-schema";
 import type { ReservationResult } from "../types";
 import { ReservationError } from "../types";
+import { correctReservationDepartmentSchema, unassignedReservationsSchema } from "../schemas/reservation-department-correction-schema";
+import { correctReservationDepartment, listReservationDepartmentCorrections, listUnassignedReservations } from "../services/reservation-department-correction-service";
+import { currentUser } from "@/lib/authorization";
+
+async function requireAdminForCorrection() {
+  const actor = await currentUser();
+  if (!actor) throw new ReservationError("UNAUTHENTICATED", "Sign in with an active account to continue.");
+  if (actor.role !== "ADMIN") throw new ReservationError("FORBIDDEN", "Administrator access is required.");
+}
 import {
   approveReservation, availability, cancelReservation, createAdminReservation, createReservation, dailyAvailability,
   getReservation, groupedReservationsForDate, listActiveUsers, listReservations, pendingReservationCount, rejectReservation, reservationsForDate,
@@ -102,4 +111,19 @@ export async function getReservationsForDateAction(input: unknown) {
 }
 export async function getGroupedReservationsForDateAction(input: unknown) {
   return run(() => groupedReservationsForDate(dailySchema.parse(input)));
+}
+export async function listUnassignedReservationsAction(input: unknown = {}) {
+  return run(async () => { await requireAdminForCorrection(); return listUnassignedReservations(unassignedReservationsSchema.parse(input)); });
+}
+export async function listReservationDepartmentCorrectionsAction(id: unknown) {
+  return run(async () => { await requireAdminForCorrection(); return listReservationDepartmentCorrections(idSchema.parse(id)); });
+}
+export async function correctReservationDepartmentAction(input: unknown) {
+  return run(async () => {
+    await requireAdminForCorrection();
+    const result = await correctReservationDepartment(correctReservationDepartmentSchema.parse(input));
+    refresh();
+    revalidatePath("/administration");
+    return result;
+  });
 }

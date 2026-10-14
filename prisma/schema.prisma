@@ -29,6 +29,8 @@ enum NotificationType {
 model User {
   id           String        @id @default(uuid()) @db.Uuid
   name         String
+  firstName    String?
+  lastName     String?
   email        String        @unique
   role         UserRole      @default(MEMBER)
   passwordHash String?
@@ -40,6 +42,7 @@ model User {
   createdReservations Reservation[] @relation("ReservationCreator")
   receivedNotifications Notification[] @relation("NotificationRecipient")
   actedNotifications    Notification[] @relation("NotificationActor")
+  departmentCorrections ReservationDepartmentCorrection[] @relation("DepartmentCorrectionActor")
   department            Department? @relation(fields: [departmentId], references: [id], onDelete: Restrict)
 
   @@index([departmentId])
@@ -56,6 +59,8 @@ model Department {
   updatedAt    DateTime      @updatedAt @db.Timestamptz(3)
   users        User[]
   reservations Reservation[]
+  previousCorrections ReservationDepartmentCorrection[] @relation("PreviousCorrectionDepartment")
+  newCorrections ReservationDepartmentCorrection[] @relation("NewCorrectionDepartment")
 
   @@index([isActive])
   @@map("departments")
@@ -115,6 +120,7 @@ model Reservation {
   department Department?       @relation(fields: [departmentId], references: [id], onDelete: Restrict)
   createdBy  User?             @relation("ReservationCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
   notifications Notification[]
+  departmentCorrections ReservationDepartmentCorrection[]
 
   @@index([resourceId, startTime, endTime])
   @@index([userId])
@@ -123,6 +129,24 @@ model Reservation {
   @@index([createdByUserId])
   @@index([status])
   @@map("reservations")
+}
+
+model ReservationDepartmentCorrection {
+  id                   String     @id @default(uuid()) @db.Uuid
+  reservationId        String     @db.Uuid
+  previousDepartmentId String?    @db.Uuid
+  newDepartmentId      String     @db.Uuid
+  correctedByUserId    String     @db.Uuid
+  reason               String
+  createdAt            DateTime   @default(now()) @db.Timestamptz(3)
+  reservation          Reservation @relation(fields: [reservationId], references: [id], onDelete: Restrict)
+  previousDepartment   Department? @relation("PreviousCorrectionDepartment", fields: [previousDepartmentId], references: [id], onDelete: Restrict)
+  newDepartment        Department @relation("NewCorrectionDepartment", fields: [newDepartmentId], references: [id], onDelete: Restrict)
+  correctedBy          User       @relation("DepartmentCorrectionActor", fields: [correctedByUserId], references: [id], onDelete: Restrict)
+
+  @@index([reservationId, createdAt])
+  @@index([correctedByUserId])
+  @@map("reservation_department_corrections")
 }
 
 model Notification {

@@ -11,7 +11,8 @@ import { passwordSchema } from "@/features/auth/password-schema";
 import { clientAddress, consumeRateLimit } from "@/lib/auth-rate-limit";
 
 const registrationSchema = z.object({
-  name: z.string().trim().min(2, "Enter your full name.").max(80, "Name is too long."),
+  firstName: z.string().trim().min(1, "Enter your first name.").max(80),
+  lastName: z.string().trim().min(1, "Enter your last name.").max(80),
   email: emailSchema,
   password: passwordSchema,
   confirmPassword: z.string(),
@@ -34,7 +35,8 @@ export async function signupAction(_state: SignupState, data: FormData): Promise
   }
 
   const parsed = registrationSchema.safeParse({
-    name: data.get("name"),
+    firstName: data.get("firstName"),
+    lastName: data.get("lastName"),
     email: data.get("email"),
     password: data.get("password"),
     confirmPassword: data.get("confirmPassword"),
@@ -55,7 +57,9 @@ export async function signupAction(_state: SignupState, data: FormData): Promise
       if (!departments[0]) throw new InactiveDepartmentError();
       await tx.user.create({
         data: {
-          name: parsed.data.name,
+          firstName: parsed.data.firstName,
+          lastName: parsed.data.lastName,
+          name: `${parsed.data.firstName} ${parsed.data.lastName}`,
           email: parsed.data.email,
           passwordHash,
           departmentId: parsed.data.departmentId,

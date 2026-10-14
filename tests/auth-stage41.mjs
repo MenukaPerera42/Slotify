@@ -76,7 +76,9 @@ try {
   assert.match(logo.headers.get("content-type"), /image\/png/);
   pass("public signup and logo asset");
 
-  const fields = { name: "Stage Test Member", email: memberEmail, password, confirmPassword: password, departmentId: signupDepartment.id };
+  const fields = { firstName: "Stage Test", lastName: "Member", email: memberEmail, password, confirmPassword: password, departmentId: signupDepartment.id };
+  assert.match((await signup({ ...fields, firstName: "" }, "192.0.2.114")).text, /firstName/);
+  assert.match((await signup({ ...fields, lastName: "" }, "192.0.2.113")).text, /lastName/);
   assert.match((await signup({ ...fields, departmentId: "" }, "192.0.2.116")).text, /departmentId/);
   const inactiveDepartment = await prisma.department.create({ data: { name: `Inactive Signup ${stamp}`, code: `I${randomBytes(5).toString("hex").toUpperCase()}`, isActive: false } });
   try {
@@ -95,11 +97,13 @@ try {
   const sixCharPass = "pass12";
   const sixCharEmail = `stage42-six-${stamp}@example.test`;
   testEmails.push(sixCharEmail);
-  const sixCharSignup = await signup({ name: "Six Char Member", email: sixCharEmail, password: sixCharPass, confirmPassword: sixCharPass, departmentId: signupDepartment.id }, "192.0.2.115");
+  const sixCharSignup = await signup({ firstName: "Six Char", lastName: "Member", email: sixCharEmail, password: sixCharPass, confirmPassword: sixCharPass, departmentId: signupDepartment.id }, "192.0.2.115");
   assert.match(sixCharSignup.response.headers.get("x-action-redirect") ?? sixCharSignup.response.headers.get("location") ?? "", /\/login\?created=1/);
   const sixCharUser = await prisma.user.findUniqueOrThrow({ where: { email: sixCharEmail } });
   assert.equal(sixCharUser.role, "MEMBER");
   assert.equal(sixCharUser.departmentId, signupDepartment.id);
+  assert.equal(sixCharUser.firstName, "Six Char");
+  assert.equal(sixCharUser.lastName, "Member");
   assert.ok(sixCharUser.passwordHash?.startsWith("$argon2id$"));
   pass("6-character password passes signup validation and creates MEMBER account");
 
@@ -108,6 +112,9 @@ try {
   const newUser = await prisma.user.findUniqueOrThrow({ where: { email: memberEmail } });
   assert.equal(newUser.role, "MEMBER");
   assert.equal(newUser.departmentId, signupDepartment.id);
+  assert.equal(newUser.firstName, "Stage Test");
+  assert.equal(newUser.lastName, "Member");
+  assert.equal(newUser.name, "Stage Test Member");
   assert.ok(newUser.passwordHash?.startsWith("$argon2id$"));
   pass("signup normalizes email, hashes password, ignores injected ADMIN role");
 

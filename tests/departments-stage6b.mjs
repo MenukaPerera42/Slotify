@@ -305,6 +305,11 @@ try {
   console.log("--- All Stage 6B Verification Checks Passed Successfully! ---");
 } finally {
   // Cleanup
+  await prisma.notification.deleteMany({ where: { OR: [
+    { reservation: { resourceId: { in: cleanup.resources } } },
+    { recipientUserId: { in: cleanup.users } },
+    { actorUserId: { in: cleanup.users } },
+  ] } });
   await prisma.reservation.deleteMany({ where: { resourceId: { in: cleanup.resources } } });
   await prisma.resource.deleteMany({ where: { id: { in: cleanup.resources } } });
   await prisma.resourceCategory.deleteMany({ where: { id: { in: cleanup.categories } } });

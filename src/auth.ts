@@ -16,6 +16,16 @@ const dummyHash = hash(randomBytes(32).toString("base64url"));
 export const { handlers, auth, signIn, signOut } = NextAuth({
   session: { strategy: "jwt", maxAge: 60 * 60 * 8 },
   pages: { signIn: "/login" },
+  callbacks: {
+    jwt({ token, user }) {
+      if (user?.id) token.sub = user.id;
+      return token;
+    },
+    session({ session, token }) {
+      if (session.user && token.sub) session.user.id = token.sub;
+      return session;
+    },
+  },
   providers: [
     Credentials({
       credentials: { email: {}, password: { type: "password" } },
