@@ -121,7 +121,6 @@ export function AvailabilityCard({ resource, categories, canManage = false }: Av
               <span>Edit</span>
             </Button>}
 
-            <Link href="/reservations">
             <Link href={`/reservations?bookResourceId=${resource.id}`}>
               <Button
                 size="sm"

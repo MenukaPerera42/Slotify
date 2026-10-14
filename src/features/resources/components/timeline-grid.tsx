@@ -102,12 +102,10 @@ export function TimelineGrid({ resources }: TimelineGridProps) {
                   {/* Right Columns: Time Slot Cells */}
                   <div className="flex-1 grid grid-cols-10 divide-x divide-[#E5E7EB] bg-white">
                     {timeSlots.map((slot, idx) => (
-                      <div
                       <Link
                         key={slot}
                         href={`/reservations?bookResourceId=${res.id}`}
                         className="h-14 relative flex items-center justify-center hover:bg-blue-50/20 transition-colors cursor-pointer"
-                        title={`${res.name} at ${slot}`}
                         title={`Book ${res.name} at ${slot}`}
                       >
                         {/* Sample booking block matching screenshot visual feel */}
@@ -116,7 +114,6 @@ export function TimelineGrid({ resources }: TimelineGridProps) {
                             Reserved
                           </div>
                         )}
-                      </div>
                       </Link>
                     ))}
                   </div>
