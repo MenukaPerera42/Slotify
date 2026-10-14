@@ -25,6 +25,7 @@ Every action returns `Promise<NotificationResult<T>>`:
 1. **No Self-Noise**: An actor is never notified about their own action.
 2. **Transactional Consistency**: Notifications are created within the exact same database transaction (`prisma.$transaction`) as the reservation status mutation. If a reservation mutation fails (conflict, stale status, past date), zero notifications are generated.
 3. **Idempotency & Stale Guard**: Stale transitions (`INVALID_STATUS_TRANSITION`) or repeated decisions update zero records and produce zero duplicate notifications.
+4. **Department Bookings**: An admin booking for a selected target user sends the target one `RESERVATION_APPROVED` notification. A department-only booking has no individual owner, so creation or cancellation does not attempt an owner notification. Admin self-booking is directly approved without a self-notification. These rules run in the same reservation transaction.
 
 ---
 
@@ -150,7 +151,7 @@ The application sidebar includes a "Quick Actions" navigation group. Below is th
 3. **Create Reservation for User**:
    - *Target UI*: Opens `ReservationFormModal` in Admin Mode B ("Book on Behalf of User").
    - *Route*: `/resources` or `/reservations`.
-   - *Server Action*: `listActiveUsersAction` + `createAdminReservationAction({ targetUserId, resourceId, title, startTime, endTime })`.
+   - *Server Action*: `listActiveUsersAction({ departmentId })` + `createAdminReservationAction({ departmentId, targetUserId, resourceId, title, startTime, endTime })`. Omit `targetUserId` for a department-only booking.
 4. **Manage Users**:
    - *Target UI*: User Administration & Role management.
    - *Route*: `/administration`.

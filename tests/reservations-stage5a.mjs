@@ -254,6 +254,10 @@ try {
   assert.ok(await prisma.reservation.count() >= initialReservationCount + 6);
   pass("reservation records persist");
 } finally {
+  if (resourceId || inactiveId) {
+    const testReservations = await prisma.reservation.findMany({ where: { resourceId: { in: [resourceId, inactiveId].filter(Boolean) } }, select: { id: true } });
+    await prisma.notification.deleteMany({ where: { reservationId: { in: testReservations.map((item) => item.id) } } });
+  }
   if (resourceId || inactiveId) await prisma.reservation.deleteMany({ where: { resourceId: { in: [resourceId, inactiveId].filter(Boolean) } } });
   if (resourceId || inactiveId || adminManagedId) await prisma.resource.deleteMany({ where: { id: { in: [resourceId, inactiveId, adminManagedId].filter(Boolean) } } });
   if (categoryId) await prisma.resourceCategory.delete({ where: { id: categoryId } });

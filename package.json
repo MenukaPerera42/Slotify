@@ -11,6 +11,7 @@
     "test:auth": "node --env-file=.env tests/auth-stage41.mjs",
     "test:reservations": "node --env-file=.env --import tsx tests/reservations-stage5a.mjs",
     "test:notifications": "node --env-file=.env tests/notifications-stage5e.mjs",
+    "test:departments": "node --env-file=.env --import tsx tests/departments-stage6a.mjs",
     "format": "prettier --write .",
     "db:seed": "node --env-file=.env --import tsx prisma/seed.ts",
     "db:seed-departments": "node --env-file=.env --import tsx prisma/seed-departments.ts",

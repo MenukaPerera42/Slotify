@@ -78,6 +78,14 @@ try {
 
   const fields = { name: "Stage Test Member", email: memberEmail, password, confirmPassword: password, departmentId: signupDepartment.id };
   assert.match((await signup({ ...fields, departmentId: "" }, "192.0.2.116")).text, /departmentId/);
+  const inactiveDepartment = await prisma.department.create({ data: { name: `Inactive Signup ${stamp}`, code: `I${randomBytes(5).toString("hex").toUpperCase()}`, isActive: false } });
+  try {
+    const inactiveEmail = `inactive-dept-${stamp}@example.test`;
+    assert.match((await signup({ ...fields, email: inactiveEmail, departmentId: inactiveDepartment.id }, "192.0.2.117")).text, /departmentId/);
+    assert.equal(await prisma.user.count({ where: { email: inactiveEmail } }), 0);
+  } finally {
+    await prisma.department.delete({ where: { id: inactiveDepartment.id } });
+  }
   assert.match((await signup({ ...fields, email: "bad-email" }, `192.0.2.${Math.floor(Math.random() * 100) + 1}`)).text, /fieldErrors.*email/);
   assert.match((await signup({ ...fields, password: "short", confirmPassword: "short" }, "192.0.2.101")).text, /at least 6 characters/);
   assert.match((await signup({ ...fields, confirmPassword: "wrong" }, "192.0.2.102")).text, /Passwords do not match/);

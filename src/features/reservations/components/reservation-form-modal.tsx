@@ -43,6 +43,7 @@ interface ActiveUserOption {
   name: string;
   email: string;
   role: string;
+  departmentId: string | null;
 }
 
 interface ReservationFormModalProps {
@@ -104,9 +105,10 @@ export function ReservationFormModal({
       listActiveUsersAction({ pageSize: 100 })
         .then((res) => {
           if (res.success) {
-            setActiveUsers(res.data.items);
-            if (res.data.items.length > 0) {
-              setTargetUserId((prev) => prev || res.data.items[0].id);
+            const assignedUsers = res.data.items.filter((user) => user.departmentId);
+            setActiveUsers(assignedUsers);
+            if (assignedUsers.length > 0) {
+              setTargetUserId((prev) => prev || assignedUsers[0].id);
             }
           }
         })
@@ -197,12 +199,19 @@ export function ReservationFormModal({
       return;
     }
 
+    const targetDepartmentId = activeUsers.find((user) => user.id === targetUserId)?.departmentId;
+    if (isAdmin && bookingMode === "behalf" && !targetDepartmentId) {
+      setErrorMessage("The selected user needs an active department assignment.");
+      return;
+    }
+
     const startISO = createColomboISO(date, startTime);
 
     startTransition(async () => {
       const result =
         isAdmin && bookingMode === "behalf"
           ? await createAdminReservationAction({
+              departmentId: targetDepartmentId!,
               targetUserId,
               resourceId,
               title: title.trim(),

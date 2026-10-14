@@ -10,6 +10,7 @@ async function main() {
 
   const adminPassword = process.env.SLOTIFY_DEMO_ADMIN_PASSWORD;
   const memberPassword = process.env.SLOTIFY_DEMO_MEMBER_PASSWORD;
+  const demoDepartmentCode = process.env.SLOTIFY_DEMO_DEPARTMENT_CODE?.trim().toUpperCase();
   const ensureDemoUser = async (name: string, email: string, role: UserRole, password?: string) => {
     let existing = await prisma.user.findUnique({ where: { email } });
     if (!existing && email === "adminslotify@gmail.com") {
@@ -28,10 +29,18 @@ async function main() {
     if (!password || password.length < 6) {
       throw new Error(`Set the 6+ character demo password environment variable before provisioning ${email}.`);
     }
+    let newUserDepartmentId: string | undefined;
+    if (!existing) {
+      const department = demoDepartmentCode
+        ? await prisma.department.findUnique({ where: { code: demoDepartmentCode }, select: { id: true, isActive: true } })
+        : null;
+      if (!department?.isActive) throw new Error(`Set SLOTIFY_DEMO_DEPARTMENT_CODE to an active, explicitly chosen department before provisioning ${email}.`);
+      newUserDepartmentId = department.id;
+    }
     const passwordHash = await hash(password);
     return existing
       ? prisma.user.update({ where: { id: existing.id }, data: { passwordHash } })
-      : prisma.user.create({ data: { name, email, role, passwordHash } });
+      : prisma.user.create({ data: { name, email, role, passwordHash, departmentId: newUserDepartmentId } });
   };
   const alexAdmin = await ensureDemoUser("Alex Vance", "adminslotify@gmail.com", UserRole.ADMIN, adminPassword);
   const sarahMember = await ensureDemoUser("Sarah Chen", "sarah.chen@primewave.local", UserRole.MEMBER, memberPassword);
