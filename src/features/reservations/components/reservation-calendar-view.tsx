@@ -84,7 +84,6 @@ export function ReservationCalendarView({
   // Fetch when selectedDate changes (with race-condition protection)
   useEffect(() => {
     let isCurrent = true;
-    setIsLoading(true);
     getGroupedReservationsForDateAction({ date: selectedDate })
       .then((result) => {
         if (isCurrent && result.success) {
@@ -93,11 +92,6 @@ export function ReservationCalendarView({
       })
       .catch((err) => {
         console.error("Failed to fetch grouped reservations for date:", err);
-      })
-      .finally(() => {
-        if (isCurrent) {
-          setIsLoading(false);
-        }
       });
 
     return () => {
@@ -286,7 +280,7 @@ export function ReservationCalendarView({
                       isSelected ? "text-blue-600" : "text-slate-400"
                     }`}
                   >
-                    {item.weekday}
+                    {item.day}
                   </span>
                   <span
                     className={`text-sm font-bold leading-none ${
@@ -372,7 +366,7 @@ export function ReservationCalendarView({
         onClose={() => setBookingModalState({ isOpen: false })}
         resources={resources}
         departments={departments}
-        preselectedResourceId={bookingModalState.resourceId}
+        initialResourceId={bookingModalState.resourceId}
         initialDate={selectedDate}
         initialStartTime={bookingModalState.startTime}
         initialEndTime={bookingModalState.endTime}

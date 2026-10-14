@@ -18,7 +18,6 @@ import {
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
-import type { ResourceItem } from "./resource-card";
 import {
   BUSINESS_TIME_SLOTS,
   formatSlotLabel,
@@ -27,7 +26,6 @@ import {
 } from "@/features/reservations/utils/client-date";
 import {
   getDepartmentColorScheme,
-  UNASSIGNED_PALETTE,
 } from "@/features/departments/utils/department-colors";
 
 export interface ReservationOccupancy {
@@ -43,6 +41,18 @@ export interface ReservationOccupancy {
   bookings?: { id: string; title: string; userId: string | null }[];
 }
 
+export interface TimelineResourceItem {
+  id: string;
+  name: string;
+  location?: string | null;
+  capacity?: number | null;
+  isActive?: boolean;
+  category?: {
+    id?: string;
+    name: string;
+  } | null;
+}
+
 export interface DepartmentOption {
   id: string;
   name: string;
@@ -50,7 +60,7 @@ export interface DepartmentOption {
 }
 
 export interface TimelineGridProps {
-  resources: ResourceItem[];
+  resources: TimelineResourceItem[];
   selectedDate: string;
   occupancy?: ReservationOccupancy[];
   departments?: DepartmentOption[];
@@ -75,7 +85,7 @@ export function TimelineGrid({
   // Detail inspection modal state
   const [inspectBooking, setInspectBooking] = useState<{
     booking: ReservationOccupancy;
-    resource: ResourceItem;
+    resource: TimelineResourceItem;
   } | null>(null);
 
   // Time slots for header (09:00 to 17:30, 30-min steps = 18 columns = 9 hours, 09:00 to 18:00)

@@ -13,6 +13,7 @@
     "test:notifications": "node --env-file=.env tests/notifications-stage5e.mjs",
     "test:departments": "node --env-file=.env --import tsx tests/departments-stage6a.mjs",
     "test:stage6b": "node --env-file=.env tests/departments-stage6b.mjs",
+    "test:stage6b1": "node --env-file=.env --import tsx tests/stage6b1-refinements.mjs",
     "format": "prettier --write .",
     "db:seed": "node --env-file=.env --import tsx prisma/seed.ts",
     "db:seed-departments": "node --env-file=.env --import tsx prisma/seed-departments.ts",

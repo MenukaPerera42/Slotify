@@ -120,3 +120,4 @@ export function getDepartmentColorScheme(
 
   return UNASSIGNED_PALETTE;
 }
+
