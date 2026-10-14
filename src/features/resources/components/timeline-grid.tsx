@@ -58,7 +58,7 @@ export function TimelineGrid({
   onSelectSlot,
   isLoading = false,
 }: TimelineGridProps) {
-  const [isExpanded, setIsExpanded] = useState(false);
+  const [isExpanded, setIsExpanded] = useState(true);
   const visibleResources = isExpanded ? resources : resources.slice(0, 2);
 
   // Time slots for header (09:00 to 17:30, 30-min steps = 18 columns = 9 hours, 09:00 to 18:00)
