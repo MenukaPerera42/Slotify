@@ -21,23 +21,23 @@ export function AuthLayout({ children }: AuthLayoutProps) {
       </header>
 
       {/* Main Grid: Shared fixed structure across Login and Signup */}
-      <div className="flex-1 w-full max-w-7xl mx-auto px-6 sm:px-10 lg:px-14 xl:px-16 grid grid-cols-1 lg:grid-cols-2 items-center gap-8 lg:gap-12 xl:gap-16 py-4 sm:py-6">
+      <div className="flex-1 w-full max-w-5xl xl:max-w-6xl mx-auto px-6 sm:px-8 lg:px-12 grid grid-cols-1 lg:grid-cols-2 items-center gap-8 lg:gap-10 xl:gap-12 py-4 sm:py-6">
         {/* Left Column: Supplied PNG illustration (same position, size, and aspect ratio) */}
-        <section className="hidden lg:flex items-center justify-center select-none pointer-events-none">
-          <div className="relative w-full max-w-[420px] xl:max-w-[480px] aspect-square flex items-center justify-center">
+        <section className="hidden lg:flex items-center justify-center lg:justify-end select-none pointer-events-none">
+          <div className="relative w-full max-w-[390px] xl:max-w-[440px] aspect-square flex items-center justify-center">
             <Image
               src="/login page.png"
               alt="Slotify Workspace Management Illustration"
               width={2000}
               height={2000}
               priority
-              className="w-full h-auto object-contain max-h-[68vh]"
+              className="w-full h-auto object-contain max-h-[66vh]"
             />
           </div>
         </section>
 
         {/* Right Column: Clean form container */}
-        <section className="w-full max-w-sm sm:max-w-md mx-auto lg:mx-0 lg:ml-auto min-w-0">
+        <section className="w-full max-w-sm sm:max-w-md mx-auto lg:mx-0 lg:pl-2 xl:pl-4 min-w-0">
           {children}
         </section>
       </div>

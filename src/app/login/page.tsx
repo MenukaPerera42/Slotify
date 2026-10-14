@@ -14,8 +14,8 @@ export default async function LoginPage({
 
   return (
     <AuthLayout>
-      <div className="space-y-6">
-        <div className="space-y-2">
+      <div className="space-y-7">
+        <div className="space-y-3">
           <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-900">
             Welcome Back
           </h1>

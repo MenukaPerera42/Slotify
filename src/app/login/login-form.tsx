@@ -10,7 +10,7 @@ export function LoginForm() {
   const [showPassword, setShowPassword] = useState(false);
 
   return (
-    <form action={action} className="space-y-4">
+    <form action={action} className="space-y-5">
       {error && (
         <div
           role="alert"
@@ -24,7 +24,7 @@ export function LoginForm() {
       <div>
         <label
           htmlFor="login-email"
-          className="block text-xs font-semibold uppercase tracking-wider text-slate-700 mb-1.5"
+          className="block text-xs font-semibold uppercase tracking-wider text-slate-700 mb-2"
         >
           Work Email
         </label>
@@ -45,7 +45,7 @@ export function LoginForm() {
       </div>
 
       <div>
-        <div className="flex items-center justify-between mb-1.5">
+        <div className="flex items-center justify-between mb-2">
           <label
             htmlFor="login-password"
             className="block text-xs font-semibold uppercase tracking-wider text-slate-700"
@@ -84,7 +84,7 @@ export function LoginForm() {
       <button
         type="submit"
         disabled={pending}
-        className="w-full rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-4 focus:ring-blue-100 disabled:opacity-60 transition-all duration-150 flex items-center justify-center gap-2 mt-2"
+        className="w-full rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-4 focus:ring-blue-100 disabled:opacity-60 transition-all duration-150 flex items-center justify-center gap-2 mt-3.5"
       >
         {pending ? (
           <>
@@ -99,7 +99,7 @@ export function LoginForm() {
         )}
       </button>
 
-      <div className="pt-3 text-center">
+      <div className="pt-4 text-center">
         <p className="text-xs text-slate-500">
           New to Slotify?{" "}
           <Link
