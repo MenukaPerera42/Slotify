@@ -27,6 +27,7 @@ interface ReservationsClientProps {
   };
   resources: ResourceOption[];
   categories: { id: string; name: string }[];
+  departments?: { id: string; name: string; code: string }[];
   reservations: ReservationItem[];
   pendingReservations: PendingReservationItem[];
 }
@@ -35,6 +36,7 @@ export function ReservationsClient({
   user,
   resources,
   categories,
+  departments = [],
   reservations,
   pendingReservations,
 }: ReservationsClientProps) {
@@ -190,6 +192,7 @@ export function ReservationsClient({
         <ReservationCalendarView
           resources={resources}
           categories={categories}
+          departments={departments}
           isAdmin={isAdmin}
         />
       )}

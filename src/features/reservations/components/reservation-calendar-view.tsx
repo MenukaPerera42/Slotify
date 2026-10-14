@@ -1,42 +1,32 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import {
   ChevronLeft,
   ChevronRight,
-  Clock,
-  Building2,
-  Monitor,
-  Cpu,
-  Layers,
-  Plus,
   RefreshCw,
-  Users,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { getReservationsForDateAction } from "../actions/reservation-actions";
+import { getGroupedReservationsForDateAction } from "../actions/reservation-actions";
 import {
   BUSINESS_TIME_SLOTS,
-  formatSlotLabel,
   formatColomboDate,
   getColomboTodayString,
   getColomboDateStrip,
 } from "../utils/client-date";
+import {
+  TimelineGrid,
+  type ReservationOccupancy,
+  type DepartmentOption,
+} from "@/features/resources/components/timeline-grid";
 import { ReservationFormModal, type ResourceOption } from "./reservation-form-modal";
-
-interface ReservationInterval {
-  id?: string;
-  resourceId: string;
-  startTime: Date | string;
-  endTime: Date | string;
-  status: "PENDING" | "APPROVED" | "REJECTED" | "CANCELLED";
-  title?: string;
-  user?: { name: string; email: string };
-}
+import { DEPARTMENT_PALETTES, UNASSIGNED_PALETTE } from "@/features/departments/utils/department-colors";
 
 interface ReservationCalendarViewProps {
   resources: ResourceOption[];
   categories: { id: string; name: string }[];
+  departments?: DepartmentOption[];
   isAdmin?: boolean;
   initialDate?: string;
   onBookResource?: (resourceId: string, date: string, startTime: string) => void;
@@ -45,14 +35,17 @@ interface ReservationCalendarViewProps {
 export function ReservationCalendarView({
   resources,
   categories,
+  departments = [],
   isAdmin = false,
   initialDate,
 }: ReservationCalendarViewProps) {
-  const [selectedDate, setSelectedDate] = useState(initialDate || getColomboTodayString());
+  const router = useRouter();
+  const [selectedDate, setSelectedDate] = useState(
+    initialDate || getColomboTodayString()
+  );
   const [selectedCategory, setSelectedCategory] = useState<string>("ALL");
-  const [reservations, setReservations] = useState<ReservationInterval[]>([]);
+  const [occupancy, setOccupancy] = useState<ReservationOccupancy[]>([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [lastRefreshed, setLastRefreshed] = useState<Date>(new Date());
 
   // Quick booking modal state
   const [bookingModalState, setBookingModalState] = useState<{
@@ -62,10 +55,7 @@ export function ReservationCalendarView({
     endTime?: string;
   }>({ isOpen: false });
 
-  // Detail popover state (for admin or user inspecting a block)
-  const [selectedBooking, setSelectedBooking] = useState<ReservationInterval | null>(null);
-
-  // Filtered resources
+  // Filtered resources matching category filter
   const filteredResources = resources.filter((res) => {
     if (!res.isActive) return false;
     if (selectedCategory !== "ALL" && res.category?.name !== selectedCategory) {
@@ -74,36 +64,40 @@ export function ReservationCalendarView({
     return true;
   });
 
-  // Fetch reservations for the selected date
+  // Fetch real grouped reservations for the selected date
   const fetchDateReservations = useCallback((dateStr: string) => {
     setIsLoading(true);
-    getReservationsForDateAction({ date: dateStr })
+    getGroupedReservationsForDateAction({ date: dateStr })
       .then((result) => {
         if (result.success) {
-          setReservations(result.data as ReservationInterval[]);
-          setLastRefreshed(new Date());
+          setOccupancy(result.data as ReservationOccupancy[]);
         }
       })
       .catch((err) => {
-        console.error("Failed to fetch reservations for date:", err);
+        console.error("Failed to fetch grouped reservations for date:", err);
       })
       .finally(() => {
         setIsLoading(false);
       });
   }, []);
 
-  // Fetch when selectedDate changes
+  // Fetch when selectedDate changes (with race-condition protection)
   useEffect(() => {
     let isCurrent = true;
-    getReservationsForDateAction({ date: selectedDate })
+    setIsLoading(true);
+    getGroupedReservationsForDateAction({ date: selectedDate })
       .then((result) => {
         if (isCurrent && result.success) {
-          setReservations(result.data as ReservationInterval[]);
-          setLastRefreshed(new Date());
+          setOccupancy(result.data as ReservationOccupancy[]);
         }
       })
       .catch((err) => {
-        console.error("Failed to fetch reservations for date:", err);
+        console.error("Failed to fetch grouped reservations for date:", err);
+      })
+      .finally(() => {
+        if (isCurrent) {
+          setIsLoading(false);
+        }
       });
 
     return () => {
@@ -151,50 +145,34 @@ export function ReservationCalendarView({
 
   const dateStripItems = getColomboDateStrip(selectedDate, 10);
 
-  // Time slots for header (e.g., from 08:00 to 18:00, 30-min intervals)
-  const displaySlots = BUSINESS_TIME_SLOTS.slice(2, 23); // 08:00 to 18:00
+  // Handle slot click from timeline
+  const handleSelectSlot = (resId: string, slotTime: string) => {
+    const sIdx = BUSINESS_TIME_SLOTS.indexOf(slotTime);
+    const endSlot =
+      sIdx !== -1 && sIdx + 2 < BUSINESS_TIME_SLOTS.length
+        ? BUSINESS_TIME_SLOTS[sIdx + 2]
+        : sIdx !== -1 && sIdx + 1 < BUSINESS_TIME_SLOTS.length
+        ? BUSINESS_TIME_SLOTS[sIdx + 1]
+        : "18:00";
 
-  // Category Icon helper
-  const renderIcon = (catName?: string) => {
-    const lower = (catName || "").toLowerCase();
-    if (lower.includes("meeting") || lower.includes("room") || lower.includes("board")) {
-      return <Building2 className="h-4 w-4" />;
-    }
-    if (lower.includes("workstation") || lower.includes("desk") || lower.includes("pod")) {
-      return <Monitor className="h-4 w-4" />;
-    }
-    if (lower.includes("lab") || lower.includes("equipment") || lower.includes("gpu")) {
-      return <Cpu className="h-4 w-4" />;
-    }
-    return <Layers className="h-4 w-4" />;
+    setBookingModalState({
+      isOpen: true,
+      resourceId: resId,
+      startTime: slotTime,
+      endTime: endSlot,
+    });
   };
 
-  // Check if a resource is booked during a particular slot
-  const getSlotOccupancy = (resourceId: string, slotTime: string) => {
-    const [slotHour, slotMin] = slotTime.split(":").map(Number);
-    // In Colombo time, check if any reservation covers this 30-minute block
-    for (const res of reservations) {
-      if (res.resourceId !== resourceId) continue;
-      const s = new Date(res.startTime);
-      const e = new Date(res.endTime);
-
-      // Convert slot to UTC millisecond bounds based on selectedDate
-      // Colombo is UTC+05:30 -> offset - 330 minutes
-      const slotStartUtc = Date.UTC(
-        parseInt(selectedDate.slice(0, 4), 10),
-        parseInt(selectedDate.slice(5, 7), 10) - 1,
-        parseInt(selectedDate.slice(8, 10), 10),
-        slotHour,
-        slotMin
-      ) - (5.5 * 60 * 60 * 1000);
-      const slotEndUtc = slotStartUtc + 30 * 60 * 1000;
-
-      if (s.getTime() < slotEndUtc && e.getTime() > slotStartUtc) {
-        return res;
-      }
-    }
-    return null;
-  };
+  // Standard departments palette list for legend
+  const departmentLegends = [
+    DEPARTMENT_PALETTES.ENG,
+    DEPARTMENT_PALETTES.FE,
+    DEPARTMENT_PALETTES.BE,
+    DEPARTMENT_PALETTES.MOBILE,
+    DEPARTMENT_PALETTES.IT,
+    DEPARTMENT_PALETTES.HR,
+    UNASSIGNED_PALETTE,
+  ];
 
   return (
     <div className="space-y-4">
@@ -231,7 +209,12 @@ export function ReservationCalendarView({
             </div>
             <div className="ml-1">
               <h3 className="text-sm font-bold text-slate-900">
-                {formatColomboDate(selectedDate, { weekday: "long", month: "long", day: "numeric", year: "numeric" })}
+                {formatColomboDate(selectedDate, {
+                  weekday: "long",
+                  month: "long",
+                  day: "numeric",
+                  year: "numeric",
+                })}
               </h3>
               <p className="text-[11px] text-slate-400">
                 Asia/Colombo Standard Time (UTC+05:30)
@@ -246,24 +229,24 @@ export function ReservationCalendarView({
               onClick={() => setSelectedCategory("ALL")}
               className={`px-3 py-1 rounded-lg text-xs font-medium transition-all ${
                 selectedCategory === "ALL"
-                  ? "bg-blue-50 text-blue-700 font-semibold border border-blue-200"
+                  ? "bg-blue-50 text-blue-700 font-semibold border border-blue-200 shadow-2xs"
                   : "bg-slate-50 text-slate-600 hover:bg-slate-100 border border-slate-200/80"
               }`}
             >
               All Categories
             </button>
-            {categories.map((c) => (
+            {categories.map((cat) => (
               <button
-                key={c.id}
+                key={cat.id}
                 type="button"
-                onClick={() => setSelectedCategory(c.name)}
+                onClick={() => setSelectedCategory(cat.name)}
                 className={`px-3 py-1 rounded-lg text-xs font-medium transition-all ${
-                  selectedCategory === c.name
-                    ? "bg-blue-50 text-blue-700 font-semibold border border-blue-200"
+                  selectedCategory === cat.name
+                    ? "bg-blue-50 text-blue-700 font-semibold border border-blue-200 shadow-2xs"
                     : "bg-slate-50 text-slate-600 hover:bg-slate-100 border border-slate-200/80"
                 }`}
               >
-                {c.name}
+                {cat.name}
               </button>
             ))}
 
@@ -271,17 +254,20 @@ export function ReservationCalendarView({
               type="button"
               onClick={() => fetchDateReservations(selectedDate)}
               disabled={isLoading}
-              title={`Last refreshed at ${lastRefreshed.toLocaleTimeString()}`}
-              className="h-8 w-8 rounded-lg border border-slate-200 flex items-center justify-center text-slate-400 hover:text-blue-600 transition-colors ml-auto sm:ml-0"
+              className="h-8 w-8 rounded-lg border border-slate-200 flex items-center justify-center text-slate-500 hover:text-blue-600 hover:bg-slate-50 transition-colors disabled:opacity-50"
+              title="Refresh schedule"
+              aria-label="Refresh schedule"
             >
-              <RefreshCw className={`h-3.5 w-3.5 ${isLoading ? "animate-spin text-blue-600" : ""}`} />
+              <RefreshCw
+                className={`h-3.5 w-3.5 ${isLoading ? "animate-spin" : ""}`}
+              />
             </button>
           </div>
         </div>
 
-        {/* Date Strip Bar matching reference design */}
-        <div className="flex items-center gap-1.5 w-full overflow-x-auto pt-1 pb-0.5 scrollbar-none select-none border-t border-slate-100">
-          <div className="flex items-center gap-1.5 flex-1 justify-between min-w-[500px]">
+        {/* Dynamic 10-Day Strip Selector */}
+        <div className="pt-2 border-t border-slate-100 overflow-x-auto">
+          <div className="flex items-center gap-2 min-w-max pb-1">
             {dateStripItems.map((item) => {
               const isSelected = item.dateStr === selectedDate;
               return (
@@ -289,16 +275,24 @@ export function ReservationCalendarView({
                   key={item.dateStr}
                   type="button"
                   onClick={() => setSelectedDate(item.dateStr)}
-                  className={`flex-1 min-w-0 py-1.5 px-1 rounded-xl flex flex-col items-center justify-center transition-all border shadow-2xs ${
+                  className={`flex flex-col items-center justify-center w-14 py-2 rounded-xl transition-all border ${
                     isSelected
-                      ? "bg-blue-50 border-blue-200 text-blue-700 shadow-xs"
-                      : "bg-white border-slate-200/80 text-slate-600 hover:border-slate-300"
+                      ? "bg-blue-50 border-blue-300 text-blue-700 shadow-2xs ring-1 ring-blue-300"
+                      : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50"
                   }`}
                 >
-                  <span className="text-[10px] font-medium text-slate-400 leading-none mb-1">
-                    {item.day}
+                  <span
+                    className={`text-[10px] font-semibold uppercase leading-none mb-1 ${
+                      isSelected ? "text-blue-600" : "text-slate-400"
+                    }`}
+                  >
+                    {item.weekday}
                   </span>
-                  <span className={`text-sm font-bold leading-none ${isSelected ? "text-blue-700" : "text-slate-800"}`}>
+                  <span
+                    className={`text-sm font-bold leading-none ${
+                      isSelected ? "text-blue-700" : "text-slate-800"
+                    }`}
+                  >
                     {item.dateNum}
                   </span>
                   <span className="text-[9px] font-medium text-slate-400 leading-none mt-1">
@@ -311,234 +305,83 @@ export function ReservationCalendarView({
         </div>
       </div>
 
-      {/* Legend & Summary */}
-      <div className="flex items-center justify-between text-xs text-slate-500 px-1">
-        <div className="flex items-center gap-4">
+      {/* Legend Bar: Status & Department Colors */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between text-xs text-slate-500 gap-2 px-1">
+        {/* Status Indicators */}
+        <div className="flex items-center gap-4 flex-wrap">
           <span className="flex items-center gap-1.5">
             <span className="h-3 w-3 rounded-md bg-white border border-slate-200 shadow-2xs" />
-            <span>Available</span>
+            <span className="text-[11px]">Available Slot (Click to book)</span>
           </span>
           <span className="flex items-center gap-1.5">
-            <span className="h-3 w-3 rounded-md bg-amber-100 border border-amber-300" />
-            <span className="text-amber-800 font-medium">Pending Approval</span>
+            <span className="h-2.5 w-2.5 rounded-full bg-amber-500 ring-2 ring-amber-300" />
+            <span className="text-[11px] text-amber-800 font-semibold">
+              Pending Approval
+            </span>
           </span>
           <span className="flex items-center gap-1.5">
-            <span className="h-3 w-3 rounded-md bg-blue-100 border border-blue-300" />
-            <span className="text-blue-800 font-medium">Approved / Reserved</span>
+            <span className="h-2.5 w-2.5 rounded-full bg-emerald-500" />
+            <span className="text-[11px] text-slate-700 font-semibold">
+              Reserved
+            </span>
           </span>
         </div>
-        <div className="text-[11px] text-slate-400">
-          Click any available slot to book immediately
+
+        {/* Department Colors Guide */}
+        <div className="flex items-center gap-1.5 flex-wrap text-[10px]">
+          <span className="font-semibold text-slate-400">Departments:</span>
+          {departmentLegends.map((dept) => (
+            <span
+              key={dept.code}
+              className="px-1.5 py-0.5 rounded border font-medium shadow-2xs"
+              style={{
+                backgroundColor: dept.bg,
+                borderColor: dept.border,
+                color: dept.text,
+              }}
+            >
+              {dept.code}
+            </span>
+          ))}
         </div>
       </div>
 
-      {/* Interactive Timeline Grid */}
-      <div className="bg-white rounded-2xl border border-[#E5E7EB] shadow-2xs overflow-hidden">
-        <div className="overflow-x-auto">
-          <div className="min-w-[960px]">
-            {/* Header: Resource column + Time markers */}
-            <div className="flex items-center border-b border-[#E5E7EB] bg-slate-50/60 text-[11px] font-semibold text-slate-600">
-              <div className="w-60 p-3 pl-4 border-r border-[#E5E7EB] shrink-0 font-bold text-slate-800">
-                Resource
-              </div>
-              <div className="flex-1 grid grid-cols-21 divide-x divide-[#E5E7EB] text-center">
-                {displaySlots.map((slot) => (
-                  <div key={slot} className="py-2.5 px-0.5 truncate text-[10px] text-slate-500 font-medium">
-                    {formatSlotLabel(slot)}
-                  </div>
-                ))}
-              </div>
-            </div>
+      {/* Shared Interactive Timeline Grid: Booked Resources Only + Continuous Multi-Hour Blocks */}
+      <TimelineGrid
+        resources={filteredResources}
+        selectedDate={selectedDate}
+        occupancy={occupancy}
+        departments={departments}
+        isAdmin={isAdmin}
+        isLoading={isLoading}
+        onSelectSlot={handleSelectSlot}
+        onNewReservation={() =>
+          setBookingModalState({
+            isOpen: true,
+            resourceId: filteredResources[0]?.id,
+            startTime: "09:00",
+            endTime: "10:00",
+          })
+        }
+        onBrowseResources={() => router.push("/resources")}
+      />
 
-            {/* Resource Rows */}
-            <div className="divide-y divide-[#E5E7EB]">
-              {filteredResources.length === 0 ? (
-                <div className="p-8 text-center text-sm text-slate-500">
-                  No active resources found in this category.
-                </div>
-              ) : (
-                filteredResources.map((res) => (
-                  <div
-                    key={res.id}
-                    className="flex items-stretch group hover:bg-slate-50/20 transition-colors"
-                  >
-                    {/* Left Column: Resource Details */}
-                    <div className="w-60 p-3.5 pl-4 border-r border-[#E5E7EB] shrink-0 flex items-center gap-3 bg-white">
-                      <div className="h-10 w-10 rounded-xl bg-blue-50 border border-blue-100 flex items-center justify-center text-blue-600 shadow-2xs shrink-0">
-                        {renderIcon(res.category?.name)}
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <h4 className="text-xs font-bold text-slate-900 truncate">
-                          {res.name}
-                        </h4>
-                        <div className="flex items-center gap-2 text-[10px] text-slate-400 mt-0.5">
-                          <span className="truncate">{res.location}</span>
-                          {res.capacity && (
-                            <span className="flex items-center gap-0.5 text-slate-500 shrink-0">
-                              <Users className="h-2.5 w-2.5" />
-                              {res.capacity}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Right Columns: Time Slot Cells */}
-                    <div className="flex-1 grid grid-cols-21 divide-x divide-[#E5E7EB] bg-white relative">
-                      {displaySlots.map((slot, idx) => {
-                        const occupancy = getSlotOccupancy(res.id, slot);
-
-                        if (occupancy) {
-                          const isPending = occupancy.status === "PENDING";
-                          return (
-                            <div
-                              key={slot}
-                              onClick={() => {
-                                if (isAdmin || occupancy.title) {
-                                  setSelectedBooking(occupancy);
-                                }
-                              }}
-                              className={`h-14 relative p-0.5 flex flex-col justify-center items-center cursor-pointer transition-all ${
-                                isPending
-                                  ? "bg-amber-50 hover:bg-amber-100/80"
-                                  : "bg-blue-50 hover:bg-blue-100/80"
-                              }`}
-                              title={
-                                occupancy.title
-                                  ? `${occupancy.title} (${occupancy.status})`
-                                  : `${occupancy.status}`
-                              }
-                            >
-                              <div
-                                className={`w-full h-full rounded-md flex flex-col justify-center items-center text-[10px] font-semibold px-1 text-center truncate ${
-                                  isPending
-                                    ? "bg-amber-100/90 text-amber-900 border border-amber-300"
-                                    : "bg-blue-100/90 text-blue-900 border border-blue-300"
-                                }`}
-                              >
-                                <span className="truncate w-full">
-                                  {occupancy.title || (isPending ? "Pending" : "Reserved")}
-                                </span>
-                                {isAdmin && occupancy.user?.name && (
-                                  <span className="text-[8px] font-normal text-slate-600 truncate w-full">
-                                    {occupancy.user.name}
-                                  </span>
-                                )}
-                              </div>
-                            </div>
-                          );
-                        }
-
-                        // Available Slot
-                        return (
-                          <div
-                            key={slot}
-                            onClick={() => {
-                              // Next slot for end time
-                              const nextSlot = displaySlots[idx + 2] || displaySlots[idx + 1] || "18:00";
-                              setBookingModalState({
-                                isOpen: true,
-                                resourceId: res.id,
-                                startTime: slot,
-                                endTime: nextSlot,
-                              });
-                            }}
-                            className="h-14 relative flex items-center justify-center hover:bg-blue-50/50 transition-colors cursor-pointer group/cell"
-                            title={`Book ${res.name} at ${formatSlotLabel(slot)}`}
-                          >
-                            <span className="opacity-0 group-hover/cell:opacity-100 text-blue-600 transition-opacity">
-                              <Plus className="h-3.5 w-3.5" />
-                            </span>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Booking Details Modal (if admin or user clicks occupied slot) */}
-      {selectedBooking && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xs">
-          <div className="bg-white rounded-2xl border border-slate-200 p-6 max-w-sm w-full shadow-xl space-y-4 animate-in zoom-in-95">
-            <div className="flex items-start justify-between pb-3 border-b border-slate-100">
-              <div className="flex items-center gap-2">
-                <div
-                  className={`h-2.5 w-2.5 rounded-full ${
-                    selectedBooking.status === "PENDING" ? "bg-amber-500" : "bg-blue-500"
-                  }`}
-                />
-                <h4 className="text-sm font-bold text-slate-900">
-                  {selectedBooking.status === "PENDING" ? "Pending Booking" : "Confirmed Reservation"}
-                </h4>
-              </div>
-              <button
-                type="button"
-                onClick={() => setSelectedBooking(null)}
-                className="text-xs text-slate-400 hover:text-slate-600"
-              >
-                ✕
-              </button>
-            </div>
-
-            <div className="space-y-2 text-xs">
-              <div>
-                <span className="text-slate-400">Title / Purpose:</span>
-                <p className="font-semibold text-slate-800 text-sm mt-0.5">
-                  {selectedBooking.title || "Occupied slot"}
-                </p>
-              </div>
-
-              <div className="flex items-center gap-1.5 text-slate-600 pt-1">
-                <Clock className="h-3.5 w-3.5 text-slate-400" />
-                <span>
-                  {new Date(selectedBooking.startTime).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })} – {new Date(selectedBooking.endTime).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
-                </span>
-              </div>
-
-              {selectedBooking.user && (
-                <div className="pt-2 border-t border-slate-100">
-                  <span className="text-slate-400">Reserved by:</span>
-                  <p className="font-medium text-slate-800">{selectedBooking.user.name}</p>
-                  <p className="text-[11px] text-slate-400">{selectedBooking.user.email}</p>
-                </div>
-              )}
-            </div>
-
-            <div className="pt-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setSelectedBooking(null)}
-                className="w-full text-xs rounded-xl"
-              >
-                Close
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Booking Modal */}
-      {bookingModalState.isOpen && (
-        <ReservationFormModal
-          isOpen={bookingModalState.isOpen}
-          onClose={() => setBookingModalState({ isOpen: false })}
-          onSuccess={() => {
-            fetchDateReservations(selectedDate);
-          }}
-          resources={resources}
-          isAdmin={isAdmin}
-          initialResourceId={bookingModalState.resourceId}
-          initialDate={selectedDate}
-          initialStartTime={bookingModalState.startTime}
-          initialEndTime={bookingModalState.endTime}
-        />
-      )}
+      {/* Quick Booking Modal */}
+      <ReservationFormModal
+        isOpen={bookingModalState.isOpen}
+        onClose={() => setBookingModalState({ isOpen: false })}
+        resources={resources}
+        departments={departments}
+        preselectedResourceId={bookingModalState.resourceId}
+        initialDate={selectedDate}
+        initialStartTime={bookingModalState.startTime}
+        initialEndTime={bookingModalState.endTime}
+        isAdmin={isAdmin}
+        onSuccess={() => {
+          fetchDateReservations(selectedDate);
+          router.refresh();
+        }}
+      />
     </div>
   );
 }

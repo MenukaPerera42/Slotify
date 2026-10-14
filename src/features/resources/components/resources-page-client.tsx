@@ -179,12 +179,25 @@ export function ResourcesPageClient({
               isAdmin={user.role === "ADMIN"}
               isLoading={isLoadingOccupancy}
               onSelectSlot={handleSelectSlot}
+              onNewReservation={() =>
+                setBookingModalState({
+                  isOpen: true,
+                  resourceId: resources[0]?.id,
+                  startTime: "09:00",
+                  endTime: "10:00",
+                })
+              }
+              onBrowseResources={() => {
+                document
+                  .getElementById("availability-section")
+                  ?.scrollIntoView({ behavior: "smooth" });
+              }}
             />
           </div>
         )}
 
         {/* Bottom Section: Availability Cards matching reference */}
-        <div className="space-y-3 pt-3">
+        <div id="availability-section" className="space-y-3 pt-3">
           <div className="flex items-center justify-between">
             <h2 className="text-sm font-bold text-slate-800">
               Meeting room availability
