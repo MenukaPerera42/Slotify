@@ -49,3 +49,4 @@ export function AuthLayout({ children }: AuthLayoutProps) {
     </main>
   );
 }
+
