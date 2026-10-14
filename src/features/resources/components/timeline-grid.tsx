@@ -112,6 +112,8 @@ export function TimelineGrid({
   const [correctReason, setCorrectReason] = useState("");
   const [isSubmittingCorrection, setIsSubmittingCorrection] = useState(false);
   const [selectedCorrectionResId, setSelectedCorrectionResId] = useState<string>("");
+  const [correctionFieldErrors, setCorrectionFieldErrors] = useState<Record<string, string[]>>({});
+  const [correctionGeneralError, setCorrectionGeneralError] = useState<string | null>(null);
 
   // Drawer for outside-window reservations
   const [showOutsideWindowDrawer, setShowOutsideWindowDrawer] = useState(false);
@@ -834,6 +836,8 @@ export function TimelineGrid({
                               ""
                           );
                           setCorrectReason("");
+                          setCorrectionFieldErrors({});
+                          setCorrectionGeneralError(null);
                           setSelectedCorrectionResId(
                             inspectBooking.booking.id ||
                               inspectBooking.booking.reservationIds?.[0] ||
@@ -850,6 +854,12 @@ export function TimelineGrid({
 
                   {isCorrectingDept && (
                     <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 space-y-2.5">
+                      {correctionGeneralError && !correctionFieldErrors.reason && !correctionFieldErrors.departmentId && (
+                        <div className="p-2 rounded-lg bg-rose-50 border border-rose-200 text-rose-700 text-xs font-medium">
+                          {correctionGeneralError}
+                        </div>
+                      )}
+
                       {(inspectBooking.booking.reservationIds?.length ?? 1) > 1 && (
                         <div>
                           <label className="text-[10px] font-bold text-slate-600 uppercase tracking-wider block mb-1">
@@ -857,10 +867,22 @@ export function TimelineGrid({
                           </label>
                           <select
                             value={selectedCorrectionResId}
-                            onChange={(e) =>
-                              setSelectedCorrectionResId(e.target.value)
-                            }
-                            className="w-full h-8 rounded-lg border border-slate-300 bg-white px-2 text-xs text-slate-800"
+                            onChange={(e) => {
+                              setSelectedCorrectionResId(e.target.value);
+                              if (correctionFieldErrors.reservationId) {
+                                setCorrectionFieldErrors((prev) => {
+                                  const copy = { ...prev };
+                                  delete copy.reservationId;
+                                  return copy;
+                                });
+                              }
+                            }}
+                            className={cn(
+                              "w-full h-8 rounded-lg border bg-white px-2 text-xs text-slate-800",
+                              correctionFieldErrors.reservationId
+                                ? "border-rose-400 focus:ring-rose-200"
+                                : "border-slate-300"
+                            )}
                           >
                             {inspectBooking.booking.reservationIds?.map(
                               (id, idx) => (
@@ -870,6 +892,11 @@ export function TimelineGrid({
                               )
                             )}
                           </select>
+                          {correctionFieldErrors.reservationId && (
+                            <p className="text-[11px] text-rose-600 mt-1">
+                              {correctionFieldErrors.reservationId[0]}
+                            </p>
+                          )}
                         </div>
                       )}
 
@@ -879,10 +906,22 @@ export function TimelineGrid({
                         </label>
                         <select
                           value={correctTargetDeptId}
-                          onChange={(e) =>
-                            setCorrectTargetDeptId(e.target.value)
-                          }
-                          className="w-full h-8 rounded-lg border border-slate-300 bg-white px-2 text-xs text-slate-800"
+                          onChange={(e) => {
+                            setCorrectTargetDeptId(e.target.value);
+                            if (correctionFieldErrors.departmentId) {
+                              setCorrectionFieldErrors((prev) => {
+                                const copy = { ...prev };
+                                delete copy.departmentId;
+                                return copy;
+                              });
+                            }
+                          }}
+                          className={cn(
+                            "w-full h-8 rounded-lg border bg-white px-2 text-xs text-slate-800",
+                            correctionFieldErrors.departmentId
+                              ? "border-rose-400 focus:ring-rose-200"
+                              : "border-slate-300"
+                          )}
                         >
                           {departments.map((d) => (
                             <option key={d.id} value={d.id}>
@@ -890,20 +929,56 @@ export function TimelineGrid({
                             </option>
                           ))}
                         </select>
+                        {correctionFieldErrors.departmentId && (
+                          <p className="text-[11px] text-rose-600 mt-1">
+                            {correctionFieldErrors.departmentId[0]}
+                          </p>
+                        )}
                       </div>
 
                       <div>
-                        <label className="text-[10px] font-bold text-slate-600 uppercase tracking-wider block mb-1">
-                          Correction Reason (Audit Trail)
-                        </label>
+                        <div className="flex items-center justify-between mb-1">
+                          <label className="text-[10px] font-bold text-slate-600 uppercase tracking-wider block">
+                            Correction Reason (Audit Trail)
+                          </label>
+                          <span
+                            className={cn(
+                              "text-[10px]",
+                              correctReason.trim().length >= 10 && correctReason.trim().length <= 500
+                                ? "text-emerald-600 font-bold"
+                                : "text-slate-400"
+                            )}
+                          >
+                            {correctReason.trim().length}/500 (min 10)
+                          </span>
+                        </div>
                         <input
                           type="text"
                           required
                           value={correctReason}
-                          onChange={(e) => setCorrectReason(e.target.value)}
-                          placeholder="e.g. Assigned to wrong team during booking"
-                          className="w-full h-8 rounded-lg border border-slate-300 px-2.5 text-xs text-slate-800"
+                          onChange={(e) => {
+                            setCorrectReason(e.target.value);
+                            if (correctionFieldErrors.reason) {
+                              setCorrectionFieldErrors((prev) => {
+                                const copy = { ...prev };
+                                delete copy.reason;
+                                return copy;
+                              });
+                            }
+                          }}
+                          placeholder="e.g. Assigned to wrong team during booking (min 10 chars)"
+                          className={cn(
+                            "w-full h-8 rounded-lg border px-2.5 text-xs text-slate-800",
+                            correctionFieldErrors.reason
+                              ? "border-rose-400 focus:ring-rose-200 bg-rose-50/20"
+                              : "border-slate-300"
+                          )}
                         />
+                        {correctionFieldErrors.reason && (
+                          <p className="text-[11px] text-rose-600 mt-1">
+                            {correctionFieldErrors.reason[0]}
+                          </p>
+                        )}
                       </div>
 
                       <div className="flex items-center justify-end gap-2 pt-1">
@@ -911,7 +986,11 @@ export function TimelineGrid({
                           type="button"
                           variant="outline"
                           size="sm"
-                          onClick={() => setIsCorrectingDept(false)}
+                          onClick={() => {
+                            setIsCorrectingDept(false);
+                            setCorrectionFieldErrors({});
+                            setCorrectionGeneralError(null);
+                          }}
                           className="h-7 text-xs"
                         >
                           Cancel
@@ -932,10 +1011,15 @@ export function TimelineGrid({
                             if (!targetId) return;
 
                             setIsSubmittingCorrection(true);
+                            setCorrectionFieldErrors({});
+                            setCorrectionGeneralError(null);
+
                             try {
                               const res =
                                 await correctReservationDepartmentAction({
                                   reservationId: targetId,
+                                  expectedDepartmentId:
+                                    inspectBooking.booking.departmentId ?? null,
                                   departmentId: correctTargetDeptId,
                                   reason: correctReason.trim(),
                                 });
@@ -944,15 +1028,31 @@ export function TimelineGrid({
                                 toast.success(
                                   "Department corrected successfully."
                                 );
+                                setInspectBooking((prev) => {
+                                  if (!prev) return null;
+                                  return {
+                                    ...prev,
+                                    booking: {
+                                      ...prev.booking,
+                                      departmentId: correctTargetDeptId,
+                                    },
+                                  };
+                                });
                                 setIsCorrectingDept(false);
-                                setInspectBooking(null);
                                 router.refresh();
                               } else {
+                                if (res.fieldErrors && Object.keys(res.fieldErrors).length > 0) {
+                                  setCorrectionFieldErrors(res.fieldErrors);
+                                }
+                                setCorrectionGeneralError(
+                                  res.error || "Failed to correct department."
+                                );
                                 toast.error(
                                   res.error || "Failed to correct department."
                                 );
                               }
                             } catch {
+                              setCorrectionGeneralError("An unexpected error occurred.");
                               toast.error("An unexpected error occurred.");
                             } finally {
                               setIsSubmittingCorrection(false);

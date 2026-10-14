@@ -32,6 +32,7 @@ export interface NotificationItem {
   createdAt: Date | string;
   readAt?: Date | string | null;
   actor?: { name: string; email: string } | null;
+  reservationId?: string | null;
   reservation?: {
     title: string;
     startTime: Date | string;
@@ -56,52 +57,77 @@ export function NotificationsView({
 
   const [filterMode, setFilterMode] = useState<"ALL" | "UNREAD" | "READ">("ALL");
   const [markingId, setMarkingId] = useState<string | null>(null);
-  const [isMarkingAll, setIsMarkingAll] = useState(false);
+  // Pure local overrides for instant responsive feedback without cascading effect setState
+  const [locallyReadIds, setLocallyReadIds] = useState<string[]>([]);
+  const [isAllLocallyRead, setIsAllLocallyRead] = useState(false);
 
-  const notifications = initialNotifications;
-  const unreadCount = initialUnreadCount;
+  const notifications = initialNotifications.map((item) => {
+    if (isAllLocallyRead || locallyReadIds.includes(item.id)) {
+      return { ...item, isRead: true, readAt: item.readAt || new Date() };
+    }
+    return item;
+  });
 
-  // Filter
+  const unreadCount = isAllLocallyRead
+    ? 0
+    : Math.max(0, initialUnreadCount - locallyReadIds.filter((id) => {
+        const orig = initialNotifications.find((n) => n.id === id);
+        return orig && !orig.isRead;
+      }).length);
+
+  // Filter items
   const filtered = notifications.filter((n) => {
     if (filterMode === "UNREAD") return !n.isRead;
     if (filterMode === "READ") return n.isRead;
     return true;
   });
 
-  // Mark single as read
+  const [isMarkingAll, setIsMarkingAll] = useState(false);
+
+  // Mark single notification as read
   const handleMarkAsRead = (id: string) => {
+    if (markingId || isPending) return;
+    const target = notifications.find((n) => n.id === id);
+    if (!target || target.isRead) return;
+
     setMarkingId(id);
     startTransition(async () => {
       try {
         const res = await markNotificationAsReadAction(id);
         if (res.success) {
+          // Optimistic local state update
+          setLocallyReadIds((prev) => (prev.includes(id) ? prev : [...prev, id]));
           toast.success("Notification marked as read.");
           router.refresh();
         } else {
           toast.error(res.error || "Failed to mark notification as read.");
         }
       } catch {
-        toast.error("An error occurred.");
+        toast.error("An unexpected error occurred.");
       } finally {
         setMarkingId(null);
       }
     });
   };
 
-  // Mark all as read
+  // Mark all notifications as read
   const handleMarkAllAsRead = () => {
+    if (isMarkingAll || isPending || unreadCount === 0) return;
+
     setIsMarkingAll(true);
     startTransition(async () => {
       try {
         const res = await markAllNotificationsAsReadAction();
         if (res.success) {
+          // Optimistic local state update
+          setIsAllLocallyRead(true);
           toast.success("All notifications marked as read.");
           router.refresh();
         } else {
           toast.error(res.error || "Failed to mark all as read.");
         }
       } catch {
-        toast.error("An error occurred.");
+        toast.error("An unexpected error occurred.");
       } finally {
         setIsMarkingAll(false);
       }
@@ -301,30 +327,38 @@ export function NotificationsView({
 
                 {/* Actions */}
                 <div className="flex items-center gap-2 self-end sm:self-center shrink-0 pt-2 sm:pt-0">
+                  {/* VIEW action: Navigates without marking as read */}
                   <Link
                     href="/reservations"
                     className="h-7 px-2.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-600 hover:text-slate-900 text-[11px] font-semibold flex items-center gap-1 transition-colors"
                   >
-                    View
+                    <span>View</span>
                     <ExternalLink className="h-3 w-3" />
                   </Link>
 
-                  {!item.isRead && (
+                  {/* Explicit MARK AS READ action on unread notifications */}
+                  {!item.isRead ? (
                     <Button
                       type="button"
                       variant="outline"
                       size="sm"
                       onClick={() => handleMarkAsRead(item.id)}
                       disabled={isItemMarking || isPending}
-                      className="h-7 px-2.5 rounded-lg text-[11px] font-semibold text-blue-600 border-blue-200 hover:bg-blue-50 gap-1"
+                      className="h-7 px-2.5 rounded-lg text-[11px] font-semibold text-blue-600 border-blue-200 hover:bg-blue-50 hover:border-blue-300 gap-1 transition-all"
                     >
                       {isItemMarking ? (
                         <Loader2 className="h-3 w-3 animate-spin" />
                       ) : (
                         <Check className="h-3 w-3" />
                       )}
-                      Mark Read
+                      Mark as Read
                     </Button>
+                  ) : (
+                    /* Subtle Read state indicator on read notifications */
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-medium text-slate-400 bg-slate-50 border border-slate-200/60">
+                      <Check className="h-3 w-3 text-slate-400" />
+                      Read
+                    </span>
                   )}
                 </div>
               </div>
@@ -335,4 +369,3 @@ export function NotificationsView({
     </div>
   );
 }
-

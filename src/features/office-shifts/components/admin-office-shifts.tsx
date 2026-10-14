@@ -324,18 +324,53 @@ export function AdminOfficeShifts() {
 
   const activeShift = shifts.find((s) => s.id === activeShiftId);
 
-  const getModeIcon = (mode: ShiftMode) => {
+  const getModeIcon = (
+    mode: ShiftMode,
+    variant: "dark-selected" | "light-selected" | "inactive" | "preset" = "inactive",
+    customClass = "h-4 w-4"
+  ) => {
+    let colorClass = "";
+    if (variant === "dark-selected") {
+      // For a DARK selected background: White icon
+      colorClass = "text-white";
+    } else if (variant === "light-selected") {
+      // For a LIGHT selected background: Dark navy icon
+      colorClass = "text-slate-900";
+    } else if (variant === "inactive") {
+      // For inactive choices: Neutral icon
+      colorClass = "text-slate-500";
+    } else {
+      switch (mode) {
+        case "MORNING":
+          colorClass = "text-amber-500";
+          break;
+        case "EVENING":
+          colorClass = "text-orange-500";
+          break;
+        case "NIGHT":
+          colorClass = "text-indigo-500";
+          break;
+        case "FULL_DAY":
+          colorClass = "text-blue-600";
+          break;
+        default:
+          colorClass = "text-slate-500";
+          break;
+      }
+    }
+
+    const merged = cn(customClass, colorClass);
     switch (mode) {
       case "MORNING":
-        return <Sun className="h-4 w-4 text-amber-500" />;
+        return <Sun className={merged} />;
       case "EVENING":
-        return <Sunset className="h-4 w-4 text-orange-500" />;
+        return <Sunset className={merged} />;
       case "NIGHT":
-        return <Moon className="h-4 w-4 text-indigo-500" />;
+        return <Moon className={merged} />;
       case "FULL_DAY":
-        return <Clock className="h-4 w-4 text-blue-600" />;
+        return <Clock className={merged} />;
       default:
-        return <Layers className="h-4 w-4 text-slate-500" />;
+        return <Layers className={merged} />;
     }
   };
 
@@ -586,7 +621,7 @@ export function AdminOfficeShifts() {
                         : "bg-slate-100 text-slate-600 border-slate-200"
                     )}
                   >
-                    {getModeIcon(shift.mode)}
+                    {getModeIcon(shift.mode, shift.isActive ? "dark-selected" : "inactive", "h-5 w-5")}
                   </div>
 
                   <div className="space-y-1">
@@ -681,31 +716,69 @@ export function AdminOfficeShifts() {
               )}
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <label className="text-xs font-bold text-slate-700 block mb-1">
-                  Shift Mode *
-                </label>
-                <select
-                  value={formMode}
-                  onChange={(e) => {
-                    const m = e.target.value as ShiftMode;
-                    setFormMode(m);
-                    if (m === "FULL_DAY") {
-                      setFormStartTime("00:00");
-                      setFormDurationHours(24);
-                    }
-                  }}
-                  className="w-full h-9 rounded-xl border border-slate-300 bg-white px-2.5 text-xs text-slate-800 shadow-2xs focus:outline-none focus:ring-2 focus:ring-blue-600"
-                >
-                  <option value="MORNING">MORNING (Daytime hours)</option>
-                  <option value="EVENING">EVENING (Up to midnight)</option>
-                  <option value="NIGHT">NIGHT (Crosses midnight)</option>
-                  <option value="FULL_DAY">FULL_DAY (24-Hour continuous)</option>
-                  <option value="CUSTOM">CUSTOM (Flexible hours)</option>
-                </select>
+            <div>
+              <label className="text-xs font-bold text-slate-700 block mb-1.5">
+                Shift Mode *
+              </label>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-3">
+                {[
+                  { mode: "MORNING" as ShiftMode, label: "Morning", hours: "08:00 – 16:00", dur: 8, start: "08:00" },
+                  { mode: "EVENING" as ShiftMode, label: "Evening", hours: "16:00 – 00:00", dur: 8, start: "16:00" },
+                  { mode: "NIGHT" as ShiftMode, label: "Night", hours: "22:00 – 06:00", dur: 8, start: "22:00" },
+                  { mode: "FULL_DAY" as ShiftMode, label: "24 Hours", hours: "00:00 – 24:00", dur: 24, start: "00:00" },
+                ].map(({ mode, label, hours, dur, start }) => {
+                  const isSelected = formMode === mode;
+                  return (
+                    <button
+                      key={mode}
+                      type="button"
+                      onClick={() => {
+                        setFormMode(mode);
+                        setFormStartTime(start);
+                        setFormDurationHours(dur);
+                      }}
+                      className={cn(
+                        "p-2.5 rounded-xl border text-left transition-all flex flex-col justify-between gap-1.5",
+                        isSelected
+                          ? "bg-blue-50/80 border-blue-600 shadow-2xs"
+                          : "bg-white border-slate-200 hover:bg-slate-50 hover:border-slate-300"
+                      )}
+                    >
+                      <div className="flex items-center justify-between">
+                        {getModeIcon(
+                          mode,
+                          isSelected ? "light-selected" : "inactive",
+                          "h-4 w-4"
+                        )}
+                        {isSelected && (
+                          <span className="h-1.5 w-1.5 rounded-full bg-blue-600" />
+                        )}
+                      </div>
+                      <div>
+                        <p
+                          className={cn(
+                            "text-xs font-bold",
+                            isSelected ? "text-slate-900" : "text-slate-700"
+                          )}
+                        >
+                          {label}
+                        </p>
+                        <p
+                          className={cn(
+                            "text-[10px]",
+                            isSelected ? "text-slate-600 font-medium" : "text-slate-400"
+                          )}
+                        >
+                          {hours}
+                        </p>
+                      </div>
+                    </button>
+                  );
+                })}
               </div>
+            </div>
 
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className="text-xs font-bold text-slate-700 block mb-1">
                   Start Time (Asia/Colombo) *

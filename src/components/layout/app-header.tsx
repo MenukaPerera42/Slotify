@@ -1,4 +1,4 @@
-import { ShieldCheck } from "lucide-react";
+
 
 interface AppHeaderProps {
   title: string;
@@ -21,13 +21,7 @@ export function AppHeader({
             <h1 className="text-2xl font-bold tracking-tight text-slate-900">
               {title}
             </h1>
-            {badge ? (
-              badge
-            ) : (
-              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-blue-50 border border-blue-200/70 text-[11px] font-semibold text-blue-700">
-                <ShieldCheck className="h-3 w-3" /> PrimeWave Lab
-              </span>
-            )}
+            {badge}
           </div>
           {description && (
             <p className="text-xs text-slate-500 mt-1">{description}</p>
