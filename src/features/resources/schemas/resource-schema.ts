@@ -30,7 +30,7 @@ export const resourceSchema = z.object({
 export type ResourceFormData = z.infer<typeof resourceSchema>;
 
 export const resourceQuerySchema = z.object({
-  search: z.string().optional(),
+  search: z.string().trim().max(120).optional(),
   categoryId: z.string().uuid().optional().or(z.literal("ALL")),
   status: z.enum(["ALL", "ACTIVE", "INACTIVE"]).optional().default("ALL"),
 });

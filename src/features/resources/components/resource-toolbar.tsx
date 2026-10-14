@@ -18,6 +18,8 @@ interface ResourceToolbarProps {
   selectedCategory?: string;
   selectedStatus?: string;
   searchQuery?: string;
+  selectedDate?: string;
+  onSelectDate?: (date: string) => void;
   activeView?: "calendar" | "map";
   onViewChange?: (view: "calendar" | "map") => void;
 }
@@ -28,6 +30,8 @@ export function ResourceToolbar({
   selectedCategory = "ALL",
   selectedStatus = "ALL",
   searchQuery = "",
+  selectedDate,
+  onSelectDate,
   activeView = "calendar",
   onViewChange,
 }: ResourceToolbarProps) {
@@ -69,6 +73,7 @@ export function ResourceToolbar({
     <>
       <div className="space-y-4">
         {/* Top Segment: Reference-style Tabs (Calendar / Interactive map) + Add Button */}
+        {/* Top Segment: Reference-style Tabs (Calendar / Catalog Cards) + Add Button */}
         <div className="flex items-center justify-between gap-4">
           <div className="flex items-center gap-2">
             <button
@@ -103,10 +108,25 @@ export function ResourceToolbar({
             <Plus className="h-4 w-4" />
             <span>Add Resource</span>
           </Button>}
+          {canManage && (
+            <Button
+              onClick={() => setIsAddOpen(true)}
+              size="sm"
+              className="rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-medium text-xs flex items-center gap-1.5 shadow-xs"
+            >
+              <Plus className="h-4 w-4" />
+              <span>Add Resource</span>
+            </Button>
+          )}
         </div>
 
         {/* Date Strip Bar matching reference screenshot position */}
         <DateStripBar />
+        {/* Dynamic Date Strip Bar wired to active date */}
+        <DateStripBar
+          selectedDate={selectedDate}
+          onSelectDate={onSelectDate}
+        />
 
         {/* Filter inputs matching reference screenshot search pills */}
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
@@ -151,6 +171,7 @@ export function ResourceToolbar({
           </div>
 
           {/* Status Dropdown styled as pill */}
+          {/* Operational Status Dropdown */}
           <div className="flex items-center gap-2">
             <div className="relative flex-1">
               <select
@@ -161,6 +182,7 @@ export function ResourceToolbar({
               >
                 <option value="ALL">Operational status (All)</option>
                 <option value="ACTIVE">Active Available</option>
+                <option value="ACTIVE">Operational (Active)</option>
                 <option value="INACTIVE">Deactivated</option>
               </select>
               <div className="absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400 text-xs">
@@ -188,6 +210,13 @@ export function ResourceToolbar({
         onClose={() => setIsAddOpen(false)}
         categories={categories}
       />}
+      {canManage && (
+        <ResourceFormModal
+          isOpen={isAddOpen}
+          onClose={() => setIsAddOpen(false)}
+          categories={categories}
+        />
+      )}
     </>
   );
 }

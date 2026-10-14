@@ -141,6 +141,9 @@ export function AppSidebar({ user }: { user: { name: string; email: string; role
               <span className="h-4 min-w-4 px-1 rounded-full bg-rose-500 text-white text-[10px] font-bold flex items-center justify-center">
                 0
               </span>
+            <div className="flex items-center gap-3 px-3.5 py-1.5 rounded-xl text-slate-400 select-none">
+              <Bell className="h-4 w-4 text-slate-300" />
+              <span>Notifications</span>
             </div>
           </div>
         </div>

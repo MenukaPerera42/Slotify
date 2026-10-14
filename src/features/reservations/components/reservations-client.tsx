@@ -211,6 +211,7 @@ export function ReservationsClient({
           </div>
 
           <AdminApprovalQueue
+            key={pendingReservations.map((item) => `${item.id}:${item.status}`).join("|")}
             initialItems={pendingReservations}
             onActionComplete={() => router.refresh()}
           />
@@ -231,6 +232,7 @@ export function ReservationsClient({
           </div>
 
           <ReservationList
+            key={reservations.map((item) => `${item.id}:${item.status}`).join("|")}
             initialItems={reservations}
             isAdmin={isAdmin}
             currentUserId={user.id}
@@ -257,6 +259,7 @@ export function ReservationsClient({
             router.refresh();
           }}
           resources={resources}
+          isAdmin={isAdmin}
           initialResourceId={activeResourceId}
         />
       )}

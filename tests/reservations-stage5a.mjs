@@ -11,6 +11,7 @@ const tag = randomBytes(6).toString("hex");
 const passphrase = `Test-${randomBytes(18).toString("base64url")}`;
 const userIds = [];
 let categoryId, resourceId, inactiveId;
+let adminManagedId;
 let initialReservationCount;
 const pass = (name) => console.log(`PASS ${name}`);
 
@@ -56,14 +57,15 @@ try {
   categoryId = (await prisma.resourceCategory.create({ data: { name: `Stage5A-${tag}` } })).id;
   resourceId = (await prisma.resource.create({ data: { name: `Stage5A Resource ${tag}`, location: "Test lab", categoryId } })).id;
   inactiveId = (await prisma.resource.create({ data: { name: `Stage5A Inactive ${tag}`, location: "Test lab", categoryId, isActive: false } })).id;
-  for (const [name, role] of [["member1", "MEMBER"], ["member2", "MEMBER"], ["admin", "ADMIN"]]) {
-    const user = await prisma.user.create({ data: { name, email: `${name}-${tag}@example.test`, role, passwordHash: await hash(passphrase) } });
+  for (const [name, role, isActive] of [["member1", "MEMBER", true], ["member2", "MEMBER", true], ["admin", "ADMIN", true], ["inactive", "MEMBER", false], ["admin2", "ADMIN", true]]) {
+    const user = await prisma.user.create({ data: { name, email: `${name}-${tag}@example.test`, role, isActive, passwordHash: await hash(passphrase) } });
     userIds.push(user.id);
   }
-  const [member, other, admin] = await Promise.all([
+  const [member, other, admin, admin2] = await Promise.all([
     login(`member1-${tag}@example.test`, passphrase, "192.0.2.21"),
     login(`member2-${tag}@example.test`, passphrase, "192.0.2.22"),
     login(`admin-${tag}@example.test`, passphrase, "192.0.2.23"),
+    login(`admin2-${tag}@example.test`, passphrase, "192.0.2.24"),
   ]);
 
   const main = slot(72);
@@ -73,12 +75,15 @@ try {
   fails(await action("createReservationAction", [input(main, inactiveId)], member), "RESOURCE_INACTIVE");
   fails(await action("createReservationAction", [input({ startTime: main.endTime, endTime: main.startTime })], member), "INVALID_INPUT");
   fails(await action("createReservationAction", [input(slot(-72))], member), "INVALID_INPUT");
+  fails(await action("createReservationAction", [{ ...input(main), userId: userIds[1] }], member), "INVALID_INPUT");
+  fails(await action("createReservationAction", [{ ...input(main), status: "APPROVED" }], member), "INVALID_INPUT");
   pass("authentication, resource, inactive, range, and past validation");
 
   succeeds(await action("createReservationAction", [input(main, resourceId, mainTitle)], member));
   const created = await find(mainTitle);
   assert.equal(created.status, "PENDING");
   assert.equal(created.userId, userIds[0]);
+  assert.equal(created.createdByUserId, userIds[0]);
   assert.equal(created.startTime.toISOString(), main.startTime);
   assert.equal(created.endTime.toISOString(), main.endTime);
   fails(await action("createReservationAction", [input(main)], other), "SLOT_CONFLICT");
@@ -135,6 +140,42 @@ try {
   assert.equal(outcomes.filter((result) => result.includes('"code":"INVALID_STATUS_TRANSITION"')).length, 1);
   pass("concurrent admin decisions: one transition succeeds");
 
+  const adminSlot = slot(144);
+  fails(await action("createAdminReservationAction", [{ targetUserId: userIds[1], ...input(adminSlot) }], member), "FORBIDDEN");
+  fails(await action("createAdminReservationAction", [{ targetUserId: userIds[3], ...input(adminSlot) }], admin), "USER_NOT_FOUND");
+  fails(await action("createAdminReservationAction", [{ targetUserId: userIds[1], ...input(adminSlot, inactiveId) }], admin), "RESOURCE_INACTIVE");
+  fails(await action("createAdminReservationAction", [{ targetUserId: userIds[1], ...input({ startTime: adminSlot.endTime, endTime: adminSlot.startTime }) }], admin), "INVALID_INPUT");
+  succeeds(await action("createAdminReservationAction", [{ targetUserId: userIds[1], ...input(adminSlot, resourceId, `Admin booked ${tag}`) }], admin));
+  const adminBooked = await find(`Admin booked ${tag}`);
+  assert.equal(adminBooked.status, "APPROVED");
+  assert.equal(adminBooked.userId, userIds[1]);
+  assert.equal(adminBooked.createdByUserId, userIds[2]);
+  fails(await action("createReservationAction", [input(adminSlot)], member), "SLOT_CONFLICT");
+  fails(await action("listActiveUsersAction", [{}], member), "FORBIDDEN");
+  const activeUsers = JSON.parse(await action("listActiveUsersAction", [{ search: tag, pageSize: 20 }], admin));
+  succeeds(JSON.stringify(activeUsers));
+  assert.ok(activeUsers.data.items.some((item) => item.id === userIds[1]));
+  assert.ok(!activeUsers.data.items.some((item) => item.id === userIds[3]));
+  pass("admin on-behalf approval, creator audit, active-user query, and authorization");
+
+  const mixedRace = slot(168);
+  const mixedResults = await Promise.all([
+    action("createReservationAction", [input(mixedRace, resourceId, `Mixed member ${tag}`)], member),
+    action("createAdminReservationAction", [{ targetUserId: userIds[1], ...input(mixedRace, resourceId, `Mixed admin ${tag}`) }], admin),
+  ]);
+  assert.equal(mixedResults.filter((result) => result.includes('"success":true')).length, 1);
+  assert.equal(mixedResults.filter((result) => result.includes('"code":"SLOT_CONFLICT"')).length, 1);
+  assert.equal(await prisma.reservation.count({ where: { resourceId, startTime: new Date(mixedRace.startTime), status: { in: ["PENDING", "APPROVED"] } } }), 1);
+  const adminRace = slot(192);
+  const adminResults = await Promise.all([
+    action("createAdminReservationAction", [{ targetUserId: userIds[0], ...input(adminRace, resourceId, `Admin race A ${tag}`) }], admin),
+    action("createAdminReservationAction", [{ targetUserId: userIds[1], ...input(adminRace, resourceId, `Admin race B ${tag}`) }], admin2),
+  ]);
+  assert.equal(adminResults.filter((result) => result.includes('"success":true')).length, 1);
+  assert.equal(adminResults.filter((result) => result.includes('"code":"SLOT_CONFLICT"')).length, 1);
+  assert.equal(await prisma.reservation.count({ where: { resourceId, startTime: new Date(adminRace.startTime), status: "APPROVED" } }), 1);
+  pass("member/admin and admin/admin races each have one winner");
+
   succeeds(await action("listOwnReservationsAction", [{ pageSize: 100 }], member));
   fails(await action("listAllReservationsAction", [{}], member), "FORBIDDEN");
   succeeds(await action("listAllReservationsAction", [{ resourceId }], admin));
@@ -144,6 +185,19 @@ try {
   succeeds(available);
   assert.match(available, /"blocked"/);
   assert.doesNotMatch(available, /@example\.test|Race A|Race B/);
+  fails(await action("findAvailableResourcesAction", [{ ...race, resourceId: inactiveId }], member), "RESOURCE_INACTIVE");
+  const day = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Colombo", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(adminSlot.startTime));
+  const daily = JSON.parse(await action("getDailyAvailabilityAction", [{ date: day, categoryId }], member));
+  assert.ok(daily.data.blocked.some((item) => item.id === resourceId && item.intervals.some((interval) => interval.status === "APPROVED")));
+  assert.ok(daily.data.inactive.some((item) => item.id === inactiveId));
+  const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Colombo", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
+  const tomorrow = new Date(Date.parse(`${today}T00:00:00Z`) + 86_400_000).toISOString().slice(0, 10);
+  succeeds(await action("getDailyAvailabilityAction", [{ date: today, categoryId }], member));
+  succeeds(await action("getDailyAvailabilityAction", [{ date: tomorrow, categoryId }], member));
+  const memberDay = JSON.parse(await action("getReservationsForDateAction", [{ date: day, categoryId }], member));
+  assert.ok(memberDay.data.every((item) => !("title" in item) && !("user" in item) && !("userId" in item)));
+  const adminDay = JSON.parse(await action("getReservationsForDateAction", [{ date: day, categoryId }], admin));
+  assert.ok(adminDay.data.some((item) => item.title === `Admin booked ${tag}` && item.user.email));
   pass("list and availability authorization and privacy");
 
   const bounds = businessDayBounds("2026-10-15");
@@ -170,14 +224,37 @@ try {
   const resourcePage = await fetch(`${base}/resources`, { headers: { Cookie: cookieHeader(member) } });
   assert.equal(resourcePage.status, 200);
   assert.match(await resourcePage.text(), /Stage5A Resource/);
+  const reservationPage = await fetch(`${base}/reservations?bookResourceId=${resourceId}`, { headers: { Cookie: cookieHeader(member) } });
+  assert.equal(reservationPage.status, 200);
+  const reservationHtml = await reservationPage.text();
+  assert.match(reservationHtml, /Interactive Calendar/);
+  assert.match(reservationHtml, /New Reservation/);
+  assert.match(reservationHtml, /Stage5A Resource/);
+  const adminPage = await fetch(`${base}/reservations`, { headers: { Cookie: cookieHeader(admin) } });
+  assert.equal(adminPage.status, 200);
+  assert.match(await adminPage.text(), /Pending Approvals/);
+  const invalidResourceQuery = await fetch(`${base}/resources?categoryId=bad-uuid`, { headers: { Cookie: cookieHeader(member) } });
+  assert.equal(invalidResourceQuery.status, 200);
   pass("existing resource page remains operational");
+
+  const resourceForm = { name: `Managed ${tag}`, description: null, categoryId, location: "Test lab", capacity: 2, isActive: true };
+  assert.equal(JSON.parse(await action("createResourceAction", [resourceForm], member)).success, false);
+  const managed = JSON.parse(await action("createResourceAction", [resourceForm], admin));
+  assert.equal(managed.success, true);
+  adminManagedId = managed.data.id;
+  const updated = JSON.parse(await action("updateResourceAction", [adminManagedId, { ...resourceForm, name: `Managed updated ${tag}` }], admin));
+  assert.equal(updated.success, true);
+  const toggled = JSON.parse(await action("toggleResourceStatusAction", [adminManagedId], admin));
+  assert.equal(toggled.success, true);
+  assert.equal(toggled.data.isActive, false);
+  pass("resource create, update, toggle remain operational and member denied");
 
   assert.ok(await prisma.reservation.count({ where: { resourceId } }) >= 6);
   assert.ok(await prisma.reservation.count() >= initialReservationCount + 6);
   pass("reservation records persist");
 } finally {
   if (resourceId || inactiveId) await prisma.reservation.deleteMany({ where: { resourceId: { in: [resourceId, inactiveId].filter(Boolean) } } });
-  if (resourceId || inactiveId) await prisma.resource.deleteMany({ where: { id: { in: [resourceId, inactiveId].filter(Boolean) } } });
+  if (resourceId || inactiveId || adminManagedId) await prisma.resource.deleteMany({ where: { id: { in: [resourceId, inactiveId, adminManagedId].filter(Boolean) } } });
   if (categoryId) await prisma.resourceCategory.delete({ where: { id: categoryId } });
   if (userIds.length) await prisma.user.deleteMany({ where: { id: { in: userIds } } });
   if (initialReservationCount !== undefined) assert.equal(await prisma.reservation.count(), initialReservationCount, "Existing reservation count changed");

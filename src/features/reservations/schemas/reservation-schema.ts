@@ -14,6 +14,20 @@ export const createReservationSchema = z.strictObject({
 }).refine(({ startTime, endTime }) => Date.parse(startTime) < Date.parse(endTime), {
   path: ["endTime"], message: "End time must be after start time",
 });
+export const createAdminReservationSchema = z.strictObject({
+  targetUserId: uuid,
+  resourceId: uuid,
+  title: z.string().trim().min(1).max(120),
+  startTime: instant,
+  endTime: instant,
+}).refine(({ startTime, endTime }) => Date.parse(startTime) < Date.parse(endTime), {
+  path: ["endTime"], message: "End time must be after start time",
+});
+export const activeUserListSchema = z.strictObject({
+  search: z.string().trim().max(100).optional(),
+  page: z.number().int().min(1).max(100000).default(1),
+  pageSize: z.number().int().min(1).max(100).default(50),
+});
 export const idSchema = uuid;
 export const dateSchema = z.iso.date().refine((value) => {
   const date = new Date(`${value}T00:00:00Z`);
@@ -42,6 +56,7 @@ export const availabilitySchema = z.strictObject({
 export const dailySchema = z.strictObject({ date: dateSchema, categoryId: uuid.optional(), resourceId: uuid.optional() });
 
 export type CreateReservationInput = z.infer<typeof createReservationSchema>;
+export type CreateAdminReservationInput = z.infer<typeof createAdminReservationSchema>;
 export type ReservationListInput = z.input<typeof reservationListSchema>;
 export type AvailabilityInput = z.infer<typeof availabilitySchema>;
 export type DailyInput = z.infer<typeof dailySchema>;

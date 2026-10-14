@@ -1,5 +1,8 @@
 import { NextResponse } from "next/server";
 import * as actions from "@/features/reservations/actions/reservation-actions";
+import * as resourceActions from "@/features/resources/actions/resource-actions";
+
+const actionRegistry = { ...actions, ...resourceActions };
 
 // Integration harness only. It is inert unless explicitly enabled in a local test server.
 export async function POST(request: Request) {
@@ -9,7 +12,7 @@ export async function POST(request: Request) {
   const body: unknown = await request.json().catch(() => null);
   if (!body || typeof body !== "object") return new NextResponse(null, { status: 400 });
   const { name, args } = body as { name?: unknown; args?: unknown };
-  if (typeof name !== "string" || !Array.isArray(args) || !(name in actions)) return new NextResponse(null, { status: 400 });
-  const action = actions[name as keyof typeof actions] as (...values: unknown[]) => Promise<unknown>;
+  if (typeof name !== "string" || !Array.isArray(args) || !(name in actionRegistry)) return new NextResponse(null, { status: 400 });
+  const action = actionRegistry[name as keyof typeof actionRegistry] as (...values: unknown[]) => Promise<unknown>;
   return NextResponse.json(await action(...args));
 }

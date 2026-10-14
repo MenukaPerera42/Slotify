@@ -532,6 +532,7 @@ export function ReservationCalendarView({
             fetchDateReservations(selectedDate);
           }}
           resources={resources}
+          isAdmin={isAdmin}
           initialResourceId={bookingModalState.resourceId}
           initialDate={selectedDate}
           initialStartTime={bookingModalState.startTime}

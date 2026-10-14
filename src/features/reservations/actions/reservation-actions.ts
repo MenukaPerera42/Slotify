@@ -3,13 +3,13 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import {
-  availabilitySchema, createReservationSchema, dailySchema, idSchema, reservationListSchema,
+  activeUserListSchema, availabilitySchema, createAdminReservationSchema, createReservationSchema, dailySchema, idSchema, reservationListSchema,
 } from "../schemas/reservation-schema";
 import type { ReservationResult } from "../types";
 import { ReservationError } from "../types";
 import {
-  approveReservation, availability, cancelReservation, createReservation, dailyAvailability,
-  getReservation, listReservations, pendingReservationCount, rejectReservation, reservationsForDate,
+  approveReservation, availability, cancelReservation, createAdminReservation, createReservation, dailyAvailability,
+  getReservation, listActiveUsers, listReservations, pendingReservationCount, rejectReservation, reservationsForDate,
 } from "../services/reservation-service";
 
 function databaseCode(error: unknown): string | undefined {
@@ -55,6 +55,16 @@ export async function createReservationAction(input: unknown) {
     refresh();
     return item;
   });
+}
+export async function createAdminReservationAction(input: unknown) {
+  return run(async () => {
+    const item = await createAdminReservation(createAdminReservationSchema.parse(input));
+    refresh();
+    return item;
+  });
+}
+export async function listActiveUsersAction(input: unknown = {}) {
+  return run(() => listActiveUsers(activeUserListSchema.parse(input)));
 }
 export async function listOwnReservationsAction(input: unknown = {}) {
   return run(() => listReservations(reservationListSchema.parse(input), "own"));

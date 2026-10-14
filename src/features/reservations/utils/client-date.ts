@@ -14,6 +14,22 @@ export function getColomboTodayString(): string {
 }
 
 /**
+ * Checks if a YYYY-MM-DD date string is today in Asia/Colombo.
+ */
+export function isColomboDateToday(dateStr: string): boolean {
+  return dateStr === getColomboTodayString();
+}
+
+/**
+ * Shifts a YYYY-MM-DD date string by a number of days safely across months and years.
+ */
+export function shiftColomboDate(dateStr: string, days: number): string {
+  const [y, m, d] = dateStr.split("-").map(Number);
+  const target = new Date(Date.UTC(y, m - 1, d + days, 12, 0, 0));
+  return target.toISOString().slice(0, 10);
+}
+
+/**
  * Formats a Date or ISO string into human-readable Colombo date e.g. "Thu, Oct 15, 2026".
  */
 export function formatColomboDate(date: Date | string, options?: Intl.DateTimeFormatOptions): string {
@@ -52,12 +68,15 @@ export function formatColomboInterval(start: Date | string, end: Date | string):
  * Returns an array of date objects for a multi-day strip around a center date.
  */
 export function getColomboDateStrip(centerDateStr: string, count = 10) {
+export function getColomboDateStrip(centerDateStr: string, count = 12) {
   // Parse YYYY-MM-DD
   const [year, month, day] = centerDateStr.split("-").map(Number);
   const base = new Date(Date.UTC(year, month - 1, day, 12, 0, 0));
 
   const items = [];
   for (let i = -2; i < count - 2; i++) {
+  const offsetStart = -2;
+  for (let i = offsetStart; i < count + offsetStart; i++) {
     const d = new Date(base.getTime() + i * 86_400_000);
     const dateStr = d.toISOString().slice(0, 10);
     const weekday = new Intl.DateTimeFormat("en-US", { timeZone: BUSINESS_TIME_ZONE, weekday: "short" }).format(d);
@@ -70,6 +89,7 @@ export function getColomboDateStrip(centerDateStr: string, count = 10) {
       dateNum: parseInt(dayNum, 10),
       month: monthStr,
       isToday: dateStr === getColomboTodayString(),
+      isToday: isColomboDateToday(dateStr),
     });
   }
   return items;
@@ -89,6 +109,7 @@ export function createColomboISO(dateStr: string, timeStr: string): string {
 
 /**
  * Standard business operating time slots in 30-minute intervals (07:00 to 19:00).
+ * Standard business operating time slots in 30-minute intervals (08:00 to 18:00).
  */
 export const BUSINESS_TIME_SLOTS = [
   "07:00", "07:30", "08:00", "08:30", "09:00", "09:30", "10:00", "10:30",
@@ -103,3 +124,19 @@ export function formatSlotLabel(time24: string): string {
   return `${displayH}:${m.toString().padStart(2, "0")} ${period}`;
 }
 
+/**
+ * Category-aware CTA labels for booking buttons per assessment requirements.
+ */
+export function getResourceBookingCta(categoryName?: string): string {
+  const lower = (categoryName || "").toLowerCase();
+  if (lower.includes("meeting") || lower.includes("room") || lower.includes("board")) {
+    return "Book meeting room";
+  }
+  if (lower.includes("workstation") || lower.includes("desk") || lower.includes("pod")) {
+    return "Reserve workspace";
+  }
+  if (lower.includes("lab") || lower.includes("equipment") || lower.includes("server") || lower.includes("gpu")) {
+    return "Reserve equipment";
+  }
+  return "Reserve resource";
+}

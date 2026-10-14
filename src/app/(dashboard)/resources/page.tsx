@@ -4,7 +4,14 @@ import { TimelineGrid } from "@/features/resources/components/timeline-grid";
 import { ResourceToolbar } from "@/features/resources/components/resource-toolbar";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Layers } from "lucide-react";
+import { ResourcesPageClient } from "@/features/resources/components/resources-page-client";
 import { requireUser } from "@/lib/authorization";
+import { resourceQuerySchema } from "@/features/resources/schemas/resource-schema";
+
+export const metadata = {
+  title: "Resources | Slotify",
+  description: "Browse organizational resources, view occupancy, and reserve slots.",
+};
 
 interface ResourcesPageProps {
   searchParams: Promise<{
@@ -19,12 +26,10 @@ export default async function ResourcesPage({
 }: ResourcesPageProps) {
   const user = await requireUser();
   const params = await searchParams;
+  const filters = resourceQuerySchema.safeParse(params);
+  const query = filters.success ? filters.data : resourceQuerySchema.parse({});
   const categories = await getCategories();
-  const resources = await getResources({
-    search: params.search,
-    categoryId: params.categoryId,
-    status: params.status || "ALL",
-  });
+  const resources = await getResources(query);
 
   return (
     <div className="flex-1 flex flex-col min-w-0">
@@ -38,11 +43,20 @@ export default async function ResourcesPage({
       <main className="flex-1 px-8 pb-12 space-y-6 max-w-7xl w-full">
         {/* Toolbar: View Tabs + Date Strip Bar + Filters */}
         <ResourceToolbar
+      <main className="flex-1 px-8 pb-12 max-w-7xl w-full">
+        <ResourcesPageClient
+          user={{
+            id: user.id,
+            name: user.name,
+            email: user.email,
+            role: user.role,
+          }}
+          resources={resources}
           categories={categories}
           canManage={user.role === "ADMIN"}
-          selectedCategory={params.categoryId || "ALL"}
-          selectedStatus={params.status || "ALL"}
-          searchQuery={params.search || ""}
+          selectedCategory={query.categoryId || "ALL"}
+          selectedStatus={query.status}
+          searchQuery={query.search || ""}
         />
 
         {/* Timeline Grid matching reference middle section */}

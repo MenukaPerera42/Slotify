@@ -5,14 +5,14 @@ import { currentUser } from "@/lib/authorization";
 import { prisma } from "@/lib/prisma";
 import { businessDayBounds } from "../utils/business-date";
 import { ReservationError } from "../types";
-import { reservationListSchema, type AvailabilityInput, type CreateReservationInput, type DailyInput } from "../schemas/reservation-schema";
+import { activeUserListSchema, reservationListSchema, type AvailabilityInput, type CreateAdminReservationInput, type CreateReservationInput, type DailyInput } from "../schemas/reservation-schema";
 
 const blocking: ReservationStatus[] = ["PENDING", "APPROVED"];
 const reservationSelect = {
-  id: true, resourceId: true, userId: true, title: true, startTime: true,
+  id: true, resourceId: true, userId: true, createdByUserId: true, title: true, startTime: true,
   endTime: true, status: true, createdAt: true, updatedAt: true,
   resource: { select: { name: true, categoryId: true } },
-  user: { select: { name: true } },
+  user: { select: { name: true, email: true } },
 } satisfies Prisma.ReservationSelect;
 
 async function actor() {
@@ -31,8 +31,7 @@ function overlap(start: Date, end: Date): Prisma.ReservationWhereInput {
   return { status: { in: blocking }, startTime: { lt: end }, endTime: { gt: start } };
 }
 
-export async function createReservation(input: CreateReservationInput) {
-  const user = await actor();
+async function insertReservation(input: CreateReservationInput, ownerId: string, creatorId: string, status: "PENDING" | "APPROVED", verifyTarget: boolean) {
   const startTime = new Date(input.startTime);
   const endTime = new Date(input.endTime);
   if (endTime <= new Date()) throw new ReservationError("INVALID_INPUT", "The reservation must not be entirely in the past.");
@@ -43,12 +42,40 @@ export async function createReservation(input: CreateReservationInput) {
     const resource = rows[0];
     if (!resource) throw new ReservationError("RESOURCE_NOT_FOUND", "Resource not found.");
     if (!resource.isActive) throw new ReservationError("RESOURCE_INACTIVE", "This resource is inactive.");
+    if (verifyTarget) {
+      const users = await tx.$queryRaw<Array<{ id: string; isActive: boolean }>>`
+        SELECT id, "isActive" FROM users WHERE id = ${ownerId}::uuid FOR SHARE`;
+      if (!users[0]?.isActive) throw new ReservationError("USER_NOT_FOUND", "Active target user not found.");
+    }
     // The GiST exclusion constraint is the final overlap authority.
     return tx.reservation.create({
-      data: { resourceId: input.resourceId, userId: user.id, title: input.title, startTime, endTime, status: "PENDING" },
+      data: { resourceId: input.resourceId, userId: ownerId, createdByUserId: creatorId, title: input.title, startTime, endTime, status },
       select: reservationSelect,
     });
   });
+}
+
+export async function createReservation(input: CreateReservationInput) {
+  const user = await actor();
+  return insertReservation(input, user.id, user.id, "PENDING", false);
+}
+
+export async function createAdminReservation(input: CreateAdminReservationInput) {
+  const user = await admin();
+  return insertReservation(input, input.targetUserId, user.id, "APPROVED", true);
+}
+
+export async function listActiveUsers(input: z.output<typeof activeUserListSchema>) {
+  await admin();
+  const where: Prisma.UserWhereInput = {
+    isActive: true,
+    ...(input.search ? { OR: [{ name: { contains: input.search, mode: "insensitive" } }, { email: { contains: input.search, mode: "insensitive" } }] } : {}),
+  };
+  const [items, total] = await prisma.$transaction([
+    prisma.user.findMany({ where, select: { id: true, name: true, email: true, role: true }, orderBy: [{ name: "asc" }, { id: "asc" }], skip: (input.page - 1) * input.pageSize, take: input.pageSize }),
+    prisma.user.count({ where }),
+  ]);
+  return { items, total, page: input.page, pageSize: input.pageSize };
 }
 
 export async function listReservations(input: z.output<typeof reservationListSchema>, scope: "own" | "all") {
@@ -105,20 +132,31 @@ export async function availability(input: AvailabilityInput) {
   await actor();
   const start = new Date(input.startTime);
   const end = new Date(input.endTime);
+  if (input.resourceId) {
+    const requested = await prisma.resource.findUnique({ where: { id: input.resourceId }, select: { isActive: true, categoryId: true } });
+    if (!requested) throw new ReservationError("RESOURCE_NOT_FOUND", "Resource not found.");
+    if (!requested.isActive) throw new ReservationError("RESOURCE_INACTIVE", "This resource is inactive.");
+    if (input.categoryId && requested.categoryId !== input.categoryId) throw new ReservationError("INVALID_INPUT", "Resource does not belong to the selected category.");
+  }
   const resources = await prisma.resource.findMany({
-    where: { isActive: true, ...(input.categoryId ? { categoryId: input.categoryId } : {}), ...(input.resourceId ? { id: input.resourceId } : {}) },
-    select: { id: true, name: true, categoryId: true, location: true, capacity: true },
+    where: { ...(input.categoryId ? { categoryId: input.categoryId } : {}), ...(input.resourceId ? { id: input.resourceId } : {}) },
+    select: { id: true, name: true, categoryId: true, location: true, capacity: true, isActive: true },
     orderBy: { name: "asc" },
   });
+  const activeResources = resources.filter((resource) => resource.isActive);
   const intervals = await prisma.reservation.findMany({
-    where: { resourceId: { in: resources.map((resource) => resource.id) }, ...overlap(start, end) },
+    where: { resourceId: { in: activeResources.map((resource) => resource.id) }, ...overlap(start, end) },
     select: { resourceId: true, startTime: true, endTime: true, status: true },
     orderBy: { startTime: "asc" },
   });
   const byResource = new Map<string, typeof intervals>();
   for (const interval of intervals) byResource.set(interval.resourceId, [...(byResource.get(interval.resourceId) ?? []), interval]);
-  const snapshot = resources.map((resource) => ({ ...resource, intervals: byResource.get(resource.id) ?? [] }));
-  return { available: snapshot.filter((resource) => resource.intervals.length === 0), blocked: snapshot.filter((resource) => resource.intervals.length > 0) };
+  const snapshot = activeResources.map((resource) => ({ ...resource, intervals: byResource.get(resource.id) ?? [] }));
+  return {
+    available: snapshot.filter((resource) => resource.intervals.length === 0),
+    blocked: snapshot.filter((resource) => resource.intervals.length > 0),
+    inactive: resources.filter((resource) => !resource.isActive),
+  };
 }
 
 export async function dailyAvailability(input: DailyInput) {

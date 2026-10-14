@@ -10,13 +10,17 @@ import {
   CheckCircle2,
   Loader2,
   FileText,
+  UserCheck,
+  ShieldAlert,
 } from "lucide-react";
 import { Modal } from "@/components/ui/modal";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
   createReservationAction,
+  createAdminReservationAction,
   findAvailableResourcesAction,
+  listActiveUsersAction,
 } from "../actions/reservation-actions";
 import {
   BUSINESS_TIME_SLOTS,
@@ -34,11 +38,19 @@ export interface ResourceOption {
   category?: { name: string } | null;
 }
 
+interface ActiveUserOption {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+}
+
 interface ReservationFormModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSuccess?: () => void;
   resources: ResourceOption[];
+  isAdmin?: boolean;
   initialResourceId?: string;
   initialDate?: string;
   initialStartTime?: string;
@@ -50,6 +62,7 @@ export function ReservationFormModal({
   onClose,
   onSuccess,
   resources,
+  isAdmin = false,
   initialResourceId,
   initialDate,
   initialStartTime = "09:00",
@@ -60,6 +73,13 @@ export function ReservationFormModal({
 
   // Active resources only
   const activeResources = resources.filter((r) => r.isActive !== false);
+
+  // Admin booking mode: "self" | "behalf"
+  const [bookingMode, setBookingMode] = useState<"self" | "behalf">("self");
+  const [targetUserId, setTargetUserId] = useState<string>("");
+  const [activeUsers, setActiveUsers] = useState<ActiveUserOption[]>([]);
+  const [isLoadingUsers, setIsLoadingUsers] = useState(false);
+  const [userSearch, setUserSearch] = useState("");
 
   const [resourceId, setResourceId] = useState(
     initialResourceId || (activeResources[0]?.id ?? "")
@@ -75,6 +95,29 @@ export function ReservationFormModal({
     "idle" | "available" | "conflict"
   >("idle");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  // Switch mode and load active users when admin selects behalf mode
+  const handleSelectMode = (mode: "self" | "behalf") => {
+    setBookingMode(mode);
+    if (mode === "behalf" && activeUsers.length === 0) {
+      setIsLoadingUsers(true);
+      listActiveUsersAction({ pageSize: 100 })
+        .then((res) => {
+          if (res.success) {
+            setActiveUsers(res.data.items);
+            if (res.data.items.length > 0) {
+              setTargetUserId((prev) => prev || res.data.items[0].id);
+            }
+          }
+        })
+        .catch((err) => {
+          console.error("Failed to load active users:", err);
+        })
+        .finally(() => {
+          setIsLoadingUsers(false);
+        });
+    }
+  };
 
   // Derived validation
   const isInvalidTimeOrder = Boolean(startTime && endTime && startTime >= endTime);
@@ -149,6 +192,11 @@ export function ReservationFormModal({
       return;
     }
 
+    if (isAdmin && bookingMode === "behalf" && !targetUserId) {
+      setErrorMessage("Please select the target user on whose behalf you are booking.");
+      return;
+    }
+
     const startISO = createColomboISO(date, startTime);
 
     startTransition(async () => {
@@ -158,12 +206,29 @@ export function ReservationFormModal({
         startTime: startISO,
         endTime: endISO,
       });
+      const result =
+        isAdmin && bookingMode === "behalf"
+          ? await createAdminReservationAction({
+              targetUserId,
+              resourceId,
+              title: title.trim(),
+              startTime: startISO,
+              endTime: endISO,
+            })
+          : await createReservationAction({
+              resourceId,
+              title: title.trim(),
+              startTime: startISO,
+              endTime: endISO,
+            });
 
       if (!result.success) {
         if (result.code === "SLOT_CONFLICT") {
           setErrorMessage("This time slot is already requested or reserved. Refresh availability and choose another time.");
         } else if (result.code === "RESOURCE_INACTIVE") {
           setErrorMessage("This resource is currently inactive and cannot be reserved.");
+        } else if (result.code === "USER_NOT_FOUND") {
+          setErrorMessage("The selected target user account was not found or is inactive.");
         } else {
           setErrorMessage(result.error || "Unable to submit reservation request.");
         }
@@ -180,6 +245,13 @@ export function ReservationFormModal({
 
   const selectedResource = resources.find((r) => r.id === resourceId);
 
+  // Filter users by search term
+  const filteredUsers = activeUsers.filter((u) => {
+    if (!userSearch) return true;
+    const term = userSearch.toLowerCase();
+    return u.name.toLowerCase().includes(term) || u.email.toLowerCase().includes(term);
+  });
+
   return (
     <Modal
       isOpen={isOpen}
@@ -193,6 +265,87 @@ export function ReservationFormModal({
           <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs flex items-start gap-2">
             <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
             <div className="flex-1">{errorMessage}</div>
+          </div>
+        )}
+
+        {/* Admin Mode Switcher: Mode A (Self) vs Mode B (On behalf of user) */}
+        {isAdmin && (
+          <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 space-y-2">
+            <label className="text-xs font-semibold text-slate-800 flex items-center gap-1.5">
+              <UserCheck className="h-3.5 w-3.5 text-blue-600" />
+              Booking Mode
+            </label>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => handleSelectMode("self")}
+                className={`py-2 px-3 rounded-lg text-xs font-semibold transition-all border ${
+                  bookingMode === "self"
+                    ? "bg-white text-blue-700 border-blue-200 shadow-2xs"
+                    : "bg-transparent text-slate-600 border-transparent hover:bg-slate-100"
+                }`}
+              >
+                Book for Myself
+              </button>
+              <button
+                type="button"
+                onClick={() => handleSelectMode("behalf")}
+                className={`py-2 px-3 rounded-lg text-xs font-semibold transition-all border ${
+                  bookingMode === "behalf"
+                    ? "bg-white text-blue-700 border-blue-200 shadow-2xs"
+                    : "bg-transparent text-slate-600 border-transparent hover:bg-slate-100"
+                }`}
+              >
+                Book on Behalf of User
+              </button>
+            </div>
+
+            {bookingMode === "behalf" && (
+              <div className="pt-2 space-y-2">
+                <div className="p-2.5 rounded-lg bg-blue-50/70 border border-blue-100 text-[11px] text-blue-800 flex items-start gap-2">
+                  <ShieldAlert className="h-3.5 w-3.5 text-blue-600 shrink-0 mt-0.5" />
+                  <div>
+                    Admin on-behalf reservations are directly <strong>APPROVED</strong> and owned by the selected target user.
+                  </div>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[11px] font-semibold text-slate-700">
+                    Target User
+                  </label>
+                  {isLoadingUsers ? (
+                    <div className="py-2 text-xs text-slate-400 flex items-center gap-1.5">
+                      <Loader2 className="h-3.5 w-3.5 animate-spin text-blue-600" />
+                      Loading active team members...
+                    </div>
+                  ) : (
+                    <>
+                      {activeUsers.length > 5 && (
+                        <input
+                          type="text"
+                          placeholder="Search user name or email..."
+                          value={userSearch}
+                          onChange={(e) => setUserSearch(e.target.value)}
+                          className="w-full px-2.5 py-1.5 text-xs rounded-lg border border-slate-200 bg-white mb-1.5 text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-blue-600"
+                        />
+                      )}
+                      <select
+                        value={targetUserId}
+                        onChange={(e) => setTargetUserId(e.target.value)}
+                        required
+                        className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600 transition-all"
+                      >
+                        {filteredUsers.map((u) => (
+                          <option key={u.id} value={u.id}>
+                            {u.name} ({u.email}) · {u.role}
+                          </option>
+                        ))}
+                      </select>
+                    </>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
         )}
 
@@ -350,6 +503,13 @@ export function ReservationFormModal({
           <Button
             type="submit"
             disabled={isSubmitting || availabilityStatus === "conflict" || isInvalidTimeOrder || activeResources.length === 0}
+            disabled={
+              isSubmitting ||
+              availabilityStatus === "conflict" ||
+              isInvalidTimeOrder ||
+              activeResources.length === 0 ||
+              (isAdmin && bookingMode === "behalf" && !targetUserId)
+            }
             className="rounded-xl text-xs h-9 bg-blue-600 hover:bg-blue-700 text-white font-medium shadow-xs"
           >
             {isSubmitting ? (
@@ -357,6 +517,8 @@ export function ReservationFormModal({
                 <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />
                 Submitting Request...
               </>
+            ) : isAdmin && bookingMode === "behalf" ? (
+              "Confirm & Approve Booking"
             ) : (
               "Submit Reservation"
             )}
