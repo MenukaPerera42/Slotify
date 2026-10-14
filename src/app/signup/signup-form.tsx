@@ -1,49 +1,339 @@
 "use client";
 
 import Link from "next/link";
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import { signupAction, type SignupState } from "./actions";
+import {
+  Eye,
+  EyeOff,
+  User,
+  Mail,
+  Building2,
+  Lock,
+  ArrowRight,
+  Loader2,
+  ShieldCheck,
+} from "lucide-react";
 
 const initialState: SignupState = {};
 
-export function SignupForm({ departments }: { departments: { id: string; name: string; code: string }[] }) {
+export function SignupForm({
+  departments,
+}: {
+  departments: { id: string; name: string; code: string }[];
+}) {
   const [state, action, pending] = useActionState(signupAction, initialState);
-  return <form action={action} className="space-y-4">
-    <div className="grid grid-cols-2 gap-3">
-      <div>
-        <label htmlFor="signup-first-name" className="block text-sm font-medium text-slate-700">First Name</label>
-        <input id="signup-first-name" name="firstName" type="text" autoComplete="given-name" required maxLength={80} aria-describedby={state.fieldErrors?.firstName ? "signup-first-name-error" : undefined} className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2.5 outline-none focus:border-blue-600 text-sm" />
-        {state.fieldErrors?.firstName && <p id="signup-first-name-error" className="text-xs text-rose-600 mt-1">{state.fieldErrors.firstName[0]}</p>}
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+
+  return (
+    <form action={action} className="space-y-4">
+      {state.message && (
+        <div
+          role="alert"
+          className="rounded-xl bg-rose-50 border border-rose-200/80 p-3 text-xs text-rose-700 flex items-start gap-2.5"
+        >
+          <span className="font-semibold shrink-0 mt-0.5">Notice:</span>
+          <span>{state.message}</span>
+        </div>
+      )}
+
+      {/* First & Last Name */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+        <div>
+          <label
+            htmlFor="signup-first-name"
+            className="block text-xs font-semibold uppercase tracking-wider text-slate-700 mb-1.5"
+          >
+            First Name
+          </label>
+          <div className="relative">
+            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+              <User className="h-4 w-4" />
+            </div>
+            <input
+              id="signup-first-name"
+              name="firstName"
+              type="text"
+              autoComplete="given-name"
+              required
+              maxLength={80}
+              placeholder="Sarah"
+              aria-describedby={
+                state.fieldErrors?.firstName
+                  ? "signup-first-name-error"
+                  : undefined
+              }
+              className={`w-full rounded-xl border ${
+                state.fieldErrors?.firstName
+                  ? "border-rose-300 bg-rose-50/30"
+                  : "border-slate-200 bg-slate-50/50"
+              } pl-9 pr-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 outline-none transition-all duration-150 focus:border-blue-600 focus:bg-white focus:ring-4 focus:ring-blue-100`}
+            />
+          </div>
+          {state.fieldErrors?.firstName && (
+            <p id="signup-first-name-error" className="text-xs text-rose-600 mt-1">
+              {state.fieldErrors.firstName[0]}
+            </p>
+          )}
+        </div>
+
+        <div>
+          <label
+            htmlFor="signup-last-name"
+            className="block text-xs font-semibold uppercase tracking-wider text-slate-700 mb-1.5"
+          >
+            Last Name
+          </label>
+          <div className="relative">
+            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+              <User className="h-4 w-4" />
+            </div>
+            <input
+              id="signup-last-name"
+              name="lastName"
+              type="text"
+              autoComplete="family-name"
+              required
+              maxLength={80}
+              placeholder="Chen"
+              aria-describedby={
+                state.fieldErrors?.lastName
+                  ? "signup-last-name-error"
+                  : undefined
+              }
+              className={`w-full rounded-xl border ${
+                state.fieldErrors?.lastName
+                  ? "border-rose-300 bg-rose-50/30"
+                  : "border-slate-200 bg-slate-50/50"
+              } pl-9 pr-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 outline-none transition-all duration-150 focus:border-blue-600 focus:bg-white focus:ring-4 focus:ring-blue-100`}
+            />
+          </div>
+          {state.fieldErrors?.lastName && (
+            <p id="signup-last-name-error" className="text-xs text-rose-600 mt-1">
+              {state.fieldErrors.lastName[0]}
+            </p>
+          )}
+        </div>
       </div>
+
+      {/* Work Email */}
       <div>
-        <label htmlFor="signup-last-name" className="block text-sm font-medium text-slate-700">Last Name</label>
-        <input id="signup-last-name" name="lastName" type="text" autoComplete="family-name" required maxLength={80} aria-describedby={state.fieldErrors?.lastName ? "signup-last-name-error" : undefined} className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2.5 outline-none focus:border-blue-600 text-sm" />
-        {state.fieldErrors?.lastName && <p id="signup-last-name-error" className="text-xs text-rose-600 mt-1">{state.fieldErrors.lastName[0]}</p>}
+        <label
+          htmlFor="signup-email"
+          className="block text-xs font-semibold uppercase tracking-wider text-slate-700 mb-1.5"
+        >
+          Work Email
+        </label>
+        <div className="relative">
+          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+            <Mail className="h-4 w-4" />
+          </div>
+          <input
+            id="signup-email"
+            name="email"
+            type="email"
+            autoComplete="email"
+            required
+            maxLength={254}
+            placeholder="sarah.chen@primewave.local"
+            aria-describedby={
+              state.fieldErrors?.email ? "signup-email-error" : undefined
+            }
+            className={`w-full rounded-xl border ${
+              state.fieldErrors?.email
+                ? "border-rose-300 bg-rose-50/30"
+                : "border-slate-200 bg-slate-50/50"
+            } pl-9 pr-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 outline-none transition-all duration-150 focus:border-blue-600 focus:bg-white focus:ring-4 focus:ring-blue-100`}
+          />
+        </div>
+        {state.fieldErrors?.email && (
+          <p id="signup-email-error" className="text-xs text-rose-600 mt-1">
+            {state.fieldErrors.email[0] || "Enter a valid email address."}
+          </p>
+        )}
       </div>
-    </div>
 
-    <label htmlFor="signup-email" className="block text-sm font-medium text-slate-700">Email Address</label>
-    <input id="signup-email" name="email" type="email" autoComplete="email" required maxLength={254} aria-describedby={state.fieldErrors?.email ? "signup-email-error" : undefined} className="-mt-2 block w-full rounded-lg border border-slate-300 px-3 py-2.5 outline-none focus:border-blue-600" />
-    {state.fieldErrors?.email && <p id="signup-email-error" className="text-xs text-rose-600">Enter a valid email address.</p>}
+      {/* Department Dropdown */}
+      <div>
+        <label
+          htmlFor="signup-department"
+          className="block text-xs font-semibold uppercase tracking-wider text-slate-700 mb-1.5"
+        >
+          Department
+        </label>
+        <div className="relative">
+          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+            <Building2 className="h-4 w-4" />
+          </div>
+          <select
+            id="signup-department"
+            name="departmentId"
+            required
+            defaultValue=""
+            aria-describedby={
+              state.fieldErrors?.departmentId
+                ? "signup-department-error"
+                : undefined
+            }
+            className={`w-full rounded-xl border ${
+              state.fieldErrors?.departmentId
+                ? "border-rose-300 bg-rose-50/30"
+                : "border-slate-200 bg-slate-50/50"
+            } pl-9 pr-8 py-2 text-sm text-slate-900 outline-none transition-all duration-150 focus:border-blue-600 focus:bg-white focus:ring-4 focus:ring-blue-100 appearance-none`}
+          >
+            <option value="" disabled>
+              Select your department…
+            </option>
+            {departments.map((department) => (
+              <option key={department.id} value={department.id}>
+                {department.name} ({department.code})
+              </option>
+            ))}
+          </select>
+          <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-slate-400 text-xs">
+            ▼
+          </div>
+        </div>
+        {state.fieldErrors?.departmentId && (
+          <p id="signup-department-error" className="text-xs text-rose-600 mt-1">
+            {state.fieldErrors.departmentId[0]}
+          </p>
+        )}
+      </div>
 
-    <label htmlFor="signup-department" className="block text-sm font-medium text-slate-700">Department</label>
-    <select id="signup-department" name="departmentId" required defaultValue="" aria-describedby={state.fieldErrors?.departmentId ? "signup-department-error" : undefined} className="-mt-2 block w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 outline-none focus:border-blue-600">
-      <option value="" disabled>Choose a department</option>
-      {departments.map((department) => <option key={department.id} value={department.id}>{department.name} ({department.code})</option>)}
-    </select>
-    {state.fieldErrors?.departmentId && <p id="signup-department-error" className="text-xs text-rose-600">{state.fieldErrors.departmentId[0]}</p>}
+      {/* Password with Show/Hide */}
+      <div>
+        <label
+          htmlFor="signup-password"
+          className="block text-xs font-semibold uppercase tracking-wider text-slate-700 mb-1.5"
+        >
+          Password
+        </label>
+        <div className="relative">
+          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+            <Lock className="h-4 w-4" />
+          </div>
+          <input
+            id="signup-password"
+            name="password"
+            type={showPassword ? "text" : "password"}
+            autoComplete="new-password"
+            required
+            minLength={6}
+            maxLength={128}
+            placeholder="At least 6 characters"
+            aria-describedby="signup-password-help"
+            className={`w-full rounded-xl border ${
+              state.fieldErrors?.password
+                ? "border-rose-300 bg-rose-50/30"
+                : "border-slate-200 bg-slate-50/50"
+            } pl-9 pr-10 py-2 text-sm text-slate-900 placeholder:text-slate-400 outline-none transition-all duration-150 focus:border-blue-600 focus:bg-white focus:ring-4 focus:ring-blue-100`}
+          />
+          <button
+            type="button"
+            onClick={() => setShowPassword((prev) => !prev)}
+            aria-label={showPassword ? "Hide password" : "Show password"}
+            className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-600 transition-colors"
+          >
+            {showPassword ? (
+              <EyeOff className="h-4 w-4" />
+            ) : (
+              <Eye className="h-4 w-4" />
+            )}
+          </button>
+        </div>
+        <p id="signup-password-help" className="text-[11px] text-slate-500 mt-1">
+          Minimum 6 characters. Protected by Argon2id cryptographic hashing.
+        </p>
+        {state.fieldErrors?.password && (
+          <p className="text-xs text-rose-600 mt-1">
+            {state.fieldErrors.password[0]}
+          </p>
+        )}
+      </div>
 
-    <label htmlFor="signup-password" className="block text-sm font-medium text-slate-700">Password</label>
-    <input id="signup-password" name="password" type="password" autoComplete="new-password" required minLength={6} maxLength={128} aria-describedby="signup-password-help" className="-mt-2 block w-full rounded-lg border border-slate-300 px-3 py-2.5 outline-none focus:border-blue-600" />
-    <p id="signup-password-help" className="text-xs text-slate-500">Minimum 6 characters. 8+ characters recommended for stronger security.</p>
-    {state.fieldErrors?.password && <p className="text-xs text-rose-600">{state.fieldErrors.password[0]}</p>}
+      {/* Confirm Password with Show/Hide */}
+      <div>
+        <label
+          htmlFor="signup-confirm"
+          className="block text-xs font-semibold uppercase tracking-wider text-slate-700 mb-1.5"
+        >
+          Confirm Password
+        </label>
+        <div className="relative">
+          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+            <ShieldCheck className="h-4 w-4" />
+          </div>
+          <input
+            id="signup-confirm"
+            name="confirmPassword"
+            type={showConfirmPassword ? "text" : "password"}
+            autoComplete="new-password"
+            required
+            placeholder="Repeat password"
+            aria-describedby={
+              state.fieldErrors?.confirmPassword
+                ? "signup-confirm-error"
+                : undefined
+            }
+            className={`w-full rounded-xl border ${
+              state.fieldErrors?.confirmPassword
+                ? "border-rose-300 bg-rose-50/30"
+                : "border-slate-200 bg-slate-50/50"
+            } pl-9 pr-10 py-2 text-sm text-slate-900 placeholder:text-slate-400 outline-none transition-all duration-150 focus:border-blue-600 focus:bg-white focus:ring-4 focus:ring-blue-100`}
+          />
+          <button
+            type="button"
+            onClick={() => setShowConfirmPassword((prev) => !prev)}
+            aria-label={
+              showConfirmPassword ? "Hide password" : "Show password"
+            }
+            className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-600 transition-colors"
+          >
+            {showConfirmPassword ? (
+              <EyeOff className="h-4 w-4" />
+            ) : (
+              <Eye className="h-4 w-4" />
+            )}
+          </button>
+        </div>
+        {state.fieldErrors?.confirmPassword && (
+          <p id="signup-confirm-error" className="text-xs text-rose-600 mt-1">
+            {state.fieldErrors.confirmPassword[0]}
+          </p>
+        )}
+      </div>
 
-    <label htmlFor="signup-confirm" className="block text-sm font-medium text-slate-700">Confirm Password</label>
-    <input id="signup-confirm" name="confirmPassword" type="password" autoComplete="new-password" required aria-describedby={state.fieldErrors?.confirmPassword ? "signup-confirm-error" : undefined} className="-mt-2 block w-full rounded-lg border border-slate-300 px-3 py-2.5 outline-none focus:border-blue-600" />
-    {state.fieldErrors?.confirmPassword && <p id="signup-confirm-error" className="text-xs text-rose-600">{state.fieldErrors.confirmPassword[0]}</p>}
+      <button
+        type="submit"
+        disabled={pending}
+        className="w-full rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-4 focus:ring-blue-100 disabled:opacity-60 transition-all duration-150 flex items-center justify-center gap-2 mt-4"
+      >
+        {pending ? (
+          <>
+            <Loader2 className="h-4 w-4 animate-spin" />
+            <span>Creating account…</span>
+          </>
+        ) : (
+          <>
+            <span>Create Account</span>
+            <ArrowRight className="h-4 w-4" />
+          </>
+        )}
+      </button>
 
-    {state.message && <p role="alert" className="text-sm text-rose-600">{state.message}</p>}
-    <button disabled={pending} className="w-full rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-60">{pending ? "Creating account…" : "Create Account"}</button>
-    <p className="text-center text-sm text-slate-500">Already have an account? <Link href="/login" className="font-semibold text-blue-600 hover:underline">Back to Login</Link></p>
-  </form>;
+      <div className="pt-2 text-center">
+        <p className="text-xs text-slate-500">
+          Already have an account?{" "}
+          <Link
+            href="/login"
+            className="font-semibold text-blue-600 hover:text-blue-700 hover:underline"
+          >
+            Back to Login
+          </Link>
+        </p>
+      </div>
+    </form>
+  );
 }
