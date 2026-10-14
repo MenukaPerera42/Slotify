@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import {
   Building2,
   Monitor,
@@ -102,9 +103,12 @@ export function TimelineGrid({ resources }: TimelineGridProps) {
                   <div className="flex-1 grid grid-cols-10 divide-x divide-[#E5E7EB] bg-white">
                     {timeSlots.map((slot, idx) => (
                       <div
+                      <Link
                         key={slot}
+                        href={`/reservations?bookResourceId=${res.id}`}
                         className="h-14 relative flex items-center justify-center hover:bg-blue-50/20 transition-colors cursor-pointer"
                         title={`${res.name} at ${slot}`}
+                        title={`Book ${res.name} at ${slot}`}
                       >
                         {/* Sample booking block matching screenshot visual feel */}
                         {idx === 2 && res.isActive && (
@@ -113,6 +117,7 @@ export function TimelineGrid({ resources }: TimelineGridProps) {
                           </div>
                         )}
                       </div>
+                      </Link>
                     ))}
                   </div>
                 </div>
