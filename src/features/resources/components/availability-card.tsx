@@ -11,7 +11,6 @@ import {
   Cpu,
   Layers,
   ArrowRight,
-  Clock,
   CalendarCheck,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -29,7 +28,6 @@ interface AvailabilityCardProps {
   onBook?: (resourceId: string) => void;
 }
 
-export function AvailabilityCard({ resource, categories, canManage = false }: AvailabilityCardProps) {
 export function AvailabilityCard({
   resource,
   categories,
@@ -98,7 +96,7 @@ export function AvailabilityCard({
           </div>
 
           {/* Right: Actions and Primary Booking Button */}
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 self-end md:self-auto">
             <Link href={`/resources/${resource.id}`}>
               <Button
                 variant="ghost"
@@ -110,20 +108,6 @@ export function AvailabilityCard({
               </Button>
             </Link>
 
-            {canManage && <Button
-              variant="ghost"
-              size="sm"
-              onClick={handleToggleStatus}
-              disabled={isPending}
-              className="h-8 px-2 text-xs text-slate-500 hover:text-slate-900"
-              title={resource.isActive ? "Deactivate Resource" : "Activate Resource"}
-            >
-              <Power
-                className={`h-3.5 w-3.5 ${
-                  resource.isActive ? "text-amber-600" : "text-emerald-600"
-                }`}
-              />
-            </Button>}
             {canManage && (
               <Button
                 variant="ghost"
@@ -131,25 +115,13 @@ export function AvailabilityCard({
                 onClick={handleToggleStatus}
                 disabled={isPending}
                 className="h-8 px-2 text-xs text-slate-500 hover:text-slate-900"
-                title={resource.isActive ? "Deactivate Resource" : "Activate Resource"}
+                title={resource.isActive ? "Deactivate" : "Activate"}
               >
-                <Power
-                  className={`h-3.5 w-3.5 ${
-                    resource.isActive ? "text-amber-600" : "text-emerald-600"
-                  }`}
-                />
+                <Power className="h-3.5 w-3.5 mr-1" />
+                <span>{resource.isActive ? "Deactivate" : "Activate"}</span>
               </Button>
             )}
 
-            {canManage && <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setIsEditOpen(true)}
-              className="h-8 px-2 text-xs text-slate-500 hover:text-slate-900"
-            >
-              <Pencil className="h-3.5 w-3.5 mr-1" />
-              <span>Edit</span>
-            </Button>}
             {canManage && (
               <Button
                 variant="ghost"
@@ -162,20 +134,16 @@ export function AvailabilityCard({
               </Button>
             )}
 
-            <Link href={`/reservations?bookResourceId=${resource.id}`}>
             {onBook ? (
               <Button
                 size="sm"
-                className="h-9 px-5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-medium text-xs flex items-center gap-2 shadow-xs transition-colors shrink-0"
                 disabled={!resource.isActive}
                 onClick={() => onBook(resource.id)}
                 className="h-9 px-5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-medium text-xs flex items-center gap-2 shadow-xs transition-colors shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                <span>Book meeting room</span>
                 <span>{bookingCtaText}</span>
                 <ArrowRight className="h-4 w-4" />
               </Button>
-            </Link>
             ) : (
               <Link href={`/reservations?bookResourceId=${resource.id}`}>
                 <Button
@@ -191,7 +159,6 @@ export function AvailabilityCard({
           </div>
         </div>
 
-        {/* Bottom Row: Green Status Indicator & Working Hours matching reference */}
         {/* Bottom Row: Truthful Operational Status & Schedule Indicator matching reference layout */}
         <div className="flex items-center justify-between pt-3 border-t border-slate-100">
           <div className="flex items-center gap-2">
@@ -203,14 +170,10 @@ export function AvailabilityCard({
               }`}
             />
             <span className="text-[11px] font-bold tracking-wider text-slate-700 uppercase">
-              {resource.isActive ? "AVAILABLE" : "INACTIVE"}
               {resource.isActive ? "OPERATIONAL" : "INACTIVE"}
             </span>
           </div>
 
-          <div className="flex items-center gap-1.5 text-xs text-emerald-600 font-medium">
-            <Clock className="h-3.5 w-3.5" />
-            <span>7:00 AM – 4:00 PM</span>
           <div className="flex items-center gap-1.5 text-xs text-slate-500 font-medium">
             <CalendarCheck className="h-3.5 w-3.5 text-blue-600" />
             <span>
@@ -224,12 +187,6 @@ export function AvailabilityCard({
         </div>
       </div>
 
-      {canManage && <ResourceFormModal
-        isOpen={isEditOpen}
-        onClose={() => setIsEditOpen(false)}
-        categories={categories}
-        resource={resource}
-      />}
       {canManage && (
         <ResourceFormModal
           isOpen={isEditOpen}

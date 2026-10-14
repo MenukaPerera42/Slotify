@@ -6,6 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { businessDayBounds } from "../utils/business-date";
 import { ReservationError } from "../types";
 import { activeUserListSchema, reservationListSchema, type AvailabilityInput, type CreateAdminReservationInput, type CreateReservationInput, type DailyInput } from "../schemas/reservation-schema";
+import { createNotificationsTx } from "@/features/notifications/services/notification-service";
 
 const blocking: ReservationStatus[] = ["PENDING", "APPROVED"];
 const reservationSelect = {
@@ -31,14 +32,20 @@ function overlap(start: Date, end: Date): Prisma.ReservationWhereInput {
   return { status: { in: blocking }, startTime: { lt: end }, endTime: { gt: start } };
 }
 
-async function insertReservation(input: CreateReservationInput, ownerId: string, creatorId: string, status: "PENDING" | "APPROVED", verifyTarget: boolean) {
+async function insertReservation(
+  input: CreateReservationInput,
+  ownerId: string,
+  creator: { id: string; name: string },
+  status: "PENDING" | "APPROVED",
+  verifyTarget: boolean
+) {
   const startTime = new Date(input.startTime);
   const endTime = new Date(input.endTime);
   if (endTime <= new Date()) throw new ReservationError("INVALID_INPUT", "The reservation must not be entirely in the past.");
   return prisma.$transaction(async (tx) => {
     // Lock the resource row against a simultaneous deactivate operation.
-    const rows = await tx.$queryRaw<Array<{ id: string; isActive: boolean }>>`
-      SELECT id, "isActive" FROM resources WHERE id = ${input.resourceId}::uuid FOR SHARE`;
+    const rows = await tx.$queryRaw<Array<{ id: string; name: string; isActive: boolean }>>`
+      SELECT id, name, "isActive" FROM resources WHERE id = ${input.resourceId}::uuid FOR SHARE`;
     const resource = rows[0];
     if (!resource) throw new ReservationError("RESOURCE_NOT_FOUND", "Resource not found.");
     if (!resource.isActive) throw new ReservationError("RESOURCE_INACTIVE", "This resource is inactive.");
@@ -48,21 +55,55 @@ async function insertReservation(input: CreateReservationInput, ownerId: string,
       if (!users[0]?.isActive) throw new ReservationError("USER_NOT_FOUND", "Active target user not found.");
     }
     // The GiST exclusion constraint is the final overlap authority.
-    return tx.reservation.create({
-      data: { resourceId: input.resourceId, userId: ownerId, createdByUserId: creatorId, title: input.title, startTime, endTime, status },
+    const created = await tx.reservation.create({
+      data: { resourceId: input.resourceId, userId: ownerId, createdByUserId: creator.id, title: input.title, startTime, endTime, status },
       select: reservationSelect,
     });
+
+    if (status === "PENDING") {
+      const admins = await tx.user.findMany({
+        where: { role: "ADMIN", isActive: true },
+        select: { id: true },
+      });
+      const recipients = admins.filter((a) => a.id !== creator.id);
+      if (recipients.length > 0) {
+        await createNotificationsTx(
+          tx,
+          recipients.map((a) => ({
+            recipientUserId: a.id,
+            actorUserId: creator.id,
+            reservationId: created.id,
+            type: "RESERVATION_REQUESTED",
+            title: "New Reservation Request",
+            message: `${creator.name} requested "${input.title}" for ${resource.name}.`,
+          }))
+        );
+      }
+    } else if (status === "APPROVED" && ownerId !== creator.id) {
+      await createNotificationsTx(tx, [
+        {
+          recipientUserId: ownerId,
+          actorUserId: creator.id,
+          reservationId: created.id,
+          type: "RESERVATION_APPROVED",
+          title: "Reservation Created",
+          message: `An administrator reserved ${resource.name} ("${input.title}") on your behalf.`,
+        },
+      ]);
+    }
+
+    return created;
   });
 }
 
 export async function createReservation(input: CreateReservationInput) {
   const user = await actor();
-  return insertReservation(input, user.id, user.id, "PENDING", false);
+  return insertReservation(input, user.id, user, "PENDING", false);
 }
 
 export async function createAdminReservation(input: CreateAdminReservationInput) {
   const user = await admin();
-  return insertReservation(input, input.targetUserId, user.id, "APPROVED", true);
+  return insertReservation(input, input.targetUserId, user, "APPROVED", true);
 }
 
 export async function listActiveUsers(input: z.output<typeof activeUserListSchema>) {
@@ -110,13 +151,83 @@ async function transition(id: string, status: "APPROVED" | "REJECTED" | "CANCELL
     id, status: status === "CANCELLED" ? { in: blocking } : "PENDING",
     ...(user.role === "ADMIN" ? {} : { userId: user.id }),
   };
-  const result = await prisma.reservation.updateMany({ where, data: { status } });
-  if (result.count === 1) return prisma.reservation.findUniqueOrThrow({ where: { id }, select: reservationSelect });
-  const existing = await prisma.reservation.findUnique({ where: { id }, select: { status: true, userId: true } });
-  if (!existing || (user.role !== "ADMIN" && existing.userId !== user.id)) {
-    throw new ReservationError("RESERVATION_NOT_FOUND", "Reservation not found.");
-  }
-  throw new ReservationError("INVALID_STATUS_TRANSITION", `This request is now ${existing.status.toLowerCase()}. Refresh and review its current status.`);
+
+  return prisma.$transaction(async (tx) => {
+    const result = await tx.reservation.updateMany({ where, data: { status } });
+    if (result.count === 0) {
+      const existing = await tx.reservation.findUnique({ where: { id }, select: { status: true, userId: true } });
+      if (!existing || (user.role !== "ADMIN" && existing.userId !== user.id)) {
+        throw new ReservationError("RESERVATION_NOT_FOUND", "Reservation not found.");
+      }
+      throw new ReservationError("INVALID_STATUS_TRANSITION", `This request is now ${existing.status.toLowerCase()}. Refresh and review its current status.`);
+    }
+
+    const updated = await tx.reservation.findUniqueOrThrow({ where: { id }, select: reservationSelect });
+
+    if (status === "APPROVED") {
+      if (updated.userId !== user.id) {
+        await createNotificationsTx(tx, [
+          {
+            recipientUserId: updated.userId,
+            actorUserId: user.id,
+            reservationId: updated.id,
+            type: "RESERVATION_APPROVED",
+            title: "Reservation Approved",
+            message: `Your reservation for "${updated.title}" has been approved.`,
+          },
+        ]);
+      }
+    } else if (status === "REJECTED") {
+      if (updated.userId !== user.id) {
+        await createNotificationsTx(tx, [
+          {
+            recipientUserId: updated.userId,
+            actorUserId: user.id,
+            reservationId: updated.id,
+            type: "RESERVATION_REJECTED",
+            title: "Reservation Rejected",
+            message: `Your reservation for "${updated.title}" was not approved.`,
+          },
+        ]);
+      }
+    } else if (status === "CANCELLED") {
+      if (updated.userId !== user.id) {
+        // Admin cancelled someone else's reservation
+        await createNotificationsTx(tx, [
+          {
+            recipientUserId: updated.userId,
+            actorUserId: user.id,
+            reservationId: updated.id,
+            type: "RESERVATION_CANCELLED",
+            title: "Reservation Cancelled",
+            message: `Your reservation for "${updated.title}" was cancelled by an administrator.`,
+          },
+        ]);
+      } else {
+        // Owner cancelled their own reservation -> notify active admins (excluding owner)
+        const admins = await tx.user.findMany({
+          where: { role: "ADMIN", isActive: true },
+          select: { id: true },
+        });
+        const recipients = admins.filter((a) => a.id !== user.id);
+        if (recipients.length > 0) {
+          await createNotificationsTx(
+            tx,
+            recipients.map((a) => ({
+              recipientUserId: a.id,
+              actorUserId: user.id,
+              reservationId: updated.id,
+              type: "RESERVATION_CANCELLED",
+              title: "Reservation Cancelled",
+              message: `${user.name} cancelled their reservation for "${updated.title}".`,
+            }))
+          );
+        }
+      }
+    }
+
+    return updated;
+  });
 }
 
 export const approveReservation = (id: string) => transition(id, "APPROVED");

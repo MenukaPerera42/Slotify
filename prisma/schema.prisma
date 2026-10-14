@@ -19,6 +19,13 @@ enum ReservationStatus {
   CANCELLED
 }
 
+enum NotificationType {
+  RESERVATION_REQUESTED
+  RESERVATION_APPROVED
+  RESERVATION_REJECTED
+  RESERVATION_CANCELLED
+}
+
 model User {
   id           String        @id @default(uuid()) @db.Uuid
   name         String
@@ -30,6 +37,8 @@ model User {
   updatedAt    DateTime      @updatedAt @db.Timestamptz(3)
   reservations        Reservation[] @relation("ReservationOwner")
   createdReservations Reservation[] @relation("ReservationCreator")
+  receivedNotifications Notification[] @relation("NotificationRecipient")
+  actedNotifications    Notification[] @relation("NotificationActor")
 
   @@map("users")
 }
@@ -85,6 +94,7 @@ model Reservation {
   resource   Resource          @relation(fields: [resourceId], references: [id], onDelete: Restrict)
   user       User              @relation("ReservationOwner", fields: [userId], references: [id], onDelete: Restrict)
   createdBy  User?             @relation("ReservationCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  notifications Notification[]
 
   @@index([resourceId, startTime, endTime])
   @@index([userId])
@@ -92,4 +102,27 @@ model Reservation {
   @@index([createdByUserId])
   @@index([status])
   @@map("reservations")
+}
+
+model Notification {
+  id              String           @id @default(uuid()) @db.Uuid
+  recipientUserId String           @db.Uuid
+  actorUserId     String?          @db.Uuid
+  reservationId   String?          @db.Uuid
+  type            NotificationType
+  title           String
+  message         String
+  isRead          Boolean          @default(false)
+  createdAt       DateTime         @default(now()) @db.Timestamptz(3)
+  readAt          DateTime?        @db.Timestamptz(3)
+
+  recipient   User         @relation("NotificationRecipient", fields: [recipientUserId], references: [id], onDelete: Cascade)
+  actor       User?        @relation("NotificationActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+  reservation Reservation? @relation(fields: [reservationId], references: [id], onDelete: SetNull)
+
+  @@index([recipientUserId, isRead, createdAt(sort: Desc)])
+  @@index([recipientUserId, createdAt(sort: Desc)])
+  @@index([reservationId])
+  @@index([actorUserId])
+  @@map("notifications")
 }

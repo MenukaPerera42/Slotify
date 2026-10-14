@@ -200,12 +200,6 @@ export function ReservationFormModal({
     const startISO = createColomboISO(date, startTime);
 
     startTransition(async () => {
-      const result = await createReservationAction({
-        resourceId,
-        title: title.trim(),
-        startTime: startISO,
-        endTime: endISO,
-      });
       const result =
         isAdmin && bookingMode === "behalf"
           ? await createAdminReservationAction({
@@ -502,7 +496,6 @@ export function ReservationFormModal({
           </Button>
           <Button
             type="submit"
-            disabled={isSubmitting || availabilityStatus === "conflict" || isInvalidTimeOrder || activeResources.length === 0}
             disabled={
               isSubmitting ||
               availabilityStatus === "conflict" ||

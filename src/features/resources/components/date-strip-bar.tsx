@@ -1,6 +1,5 @@
 "use client";
 
-import { useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -9,28 +8,11 @@ import {
   getColomboTodayString,
 } from "@/features/reservations/utils/client-date";
 
-const daysData = [
-  { day: "Fri", date: 5, month: "Dec" },
-  { day: "Mon", date: 8, month: "Dec", isSelected: true },
-  { day: "Tue", date: 9, month: "Dec" },
-  { day: "Wed", date: 10, month: "Dec" },
-  { day: "Thu", date: 11, month: "Dec" },
-  { day: "Fri", date: 12, month: "Dec" },
-  { day: "Mon", date: 15, month: "Dec" },
-  { day: "Tue", date: 16, month: "Dec" },
-  { day: "Wed", date: 17, month: "Dec" },
-  { day: "Thu", date: 18, month: "Dec" },
-  { day: "Fri", date: 19, month: "Dec" },
-  { day: "Mon", date: 22, month: "Dec" },
-  { day: "Tue", date: 23, month: "Dec" },
-];
 interface DateStripBarProps {
   selectedDate?: string;
   onSelectDate?: (date: string) => void;
 }
 
-export function DateStripBar() {
-  const [selectedDate, setSelectedDate] = useState(8);
 export function DateStripBar({
   selectedDate: propSelectedDate,
   onSelectDate,
@@ -49,7 +31,6 @@ export function DateStripBar({
   };
 
   return (
-    <div className="flex items-center gap-1.5 w-full overflow-x-auto py-1 scrollbar-none select-none">
     <div className="flex items-center gap-1.5 w-full py-1 select-none">
       <button
         type="button"
@@ -61,22 +42,15 @@ export function DateStripBar({
         <ChevronLeft className="h-4 w-4" />
       </button>
 
-      <div className="flex items-center gap-2 flex-1 justify-between min-w-0">
-        {daysData.map((item) => {
-          const isCurrent = item.date === selectedDate;
       <div className="flex items-center gap-1.5 sm:gap-2 flex-1 overflow-x-auto scrollbar-none min-w-0">
         {dateStripItems.map((item) => {
           const isSelected = item.dateStr === selectedDate;
           return (
             <button
-              key={`${item.day}-${item.date}`}
               key={item.dateStr}
               type="button"
-              onClick={() => setSelectedDate(item.date)}
               onClick={() => onSelectDate?.(item.dateStr)}
               className={cn(
-                "flex-1 min-w-0 py-1.5 px-0.5 sm:px-1 rounded-xl flex flex-col items-center justify-center transition-all border shadow-2xs",
-                isCurrent
                 "min-w-[44px] sm:min-w-0 sm:flex-1 py-1.5 px-1 rounded-xl flex flex-col items-center justify-center transition-all border shadow-2xs relative shrink-0 sm:shrink",
                 isSelected
                   ? "bg-blue-50 border-blue-200 text-blue-700 shadow-xs"
@@ -95,8 +69,6 @@ export function DateStripBar({
               <span className="text-[10px] font-medium text-slate-400 leading-none mb-1">
                 {item.day}
               </span>
-              <span className={cn("text-base font-bold leading-none", isCurrent ? "text-blue-700" : "text-slate-800")}>
-                {item.date}
               <span
                 className={cn(
                   "text-base font-bold leading-none",

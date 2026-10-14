@@ -67,14 +67,12 @@ export function formatColomboInterval(start: Date | string, end: Date | string):
 /**
  * Returns an array of date objects for a multi-day strip around a center date.
  */
-export function getColomboDateStrip(centerDateStr: string, count = 10) {
 export function getColomboDateStrip(centerDateStr: string, count = 12) {
   // Parse YYYY-MM-DD
   const [year, month, day] = centerDateStr.split("-").map(Number);
   const base = new Date(Date.UTC(year, month - 1, day, 12, 0, 0));
 
   const items = [];
-  for (let i = -2; i < count - 2; i++) {
   const offsetStart = -2;
   for (let i = offsetStart; i < count + offsetStart; i++) {
     const d = new Date(base.getTime() + i * 86_400_000);
@@ -88,7 +86,6 @@ export function getColomboDateStrip(centerDateStr: string, count = 12) {
       day: weekday,
       dateNum: parseInt(dayNum, 10),
       month: monthStr,
-      isToday: dateStr === getColomboTodayString(),
       isToday: isColomboDateToday(dateStr),
     });
   }
@@ -109,7 +106,6 @@ export function createColomboISO(dateStr: string, timeStr: string): string {
 
 /**
  * Standard business operating time slots in 30-minute intervals (07:00 to 19:00).
- * Standard business operating time slots in 30-minute intervals (08:00 to 18:00).
  */
 export const BUSINESS_TIME_SLOTS = [
   "07:00", "07:30", "08:00", "08:30", "09:00", "09:30", "10:00", "10:30",
