@@ -11,9 +11,10 @@ import { Button } from "@/components/ui/button";
 import { getGroupedReservationsForDateAction } from "../actions/reservation-actions";
 import {
   BUSINESS_TIME_SLOTS,
-  formatColomboDate,
+  formatColomboFullDate,
   getColomboTodayString,
-  getColomboDateStrip,
+  getColomboDateRange,
+  shiftColomboDate,
 } from "../utils/client-date";
 import {
   TimelineGrid,
@@ -123,23 +124,42 @@ export function ReservationCalendarView({
   }, [selectedDate, fetchDateReservations]);
 
   // Date navigation handlers
+  const VISIBLE_COUNT = 10;
+  const [rangeStart, setRangeStart] = useState(() => shiftColomboDate(selectedDate, -2));
+  const [prevSelectedDate, setPrevSelectedDate] = useState(selectedDate);
+  const rangeEnd = shiftColomboDate(rangeStart, VISIBLE_COUNT - 1);
+
+  if (selectedDate !== prevSelectedDate) {
+    setPrevSelectedDate(selectedDate);
+    if (selectedDate < rangeStart) {
+      setRangeStart(shiftColomboDate(selectedDate, -1));
+    } else if (selectedDate > rangeEnd) {
+      setRangeStart(shiftColomboDate(selectedDate, -(VISIBLE_COUNT - 2)));
+    }
+  }
+
   const handlePrevDay = () => {
-    const [y, m, d] = selectedDate.split("-").map(Number);
-    const prev = new Date(Date.UTC(y, m - 1, d - 1));
-    setSelectedDate(prev.toISOString().slice(0, 10));
+    const prev = shiftColomboDate(selectedDate, -1);
+    setSelectedDate(prev);
+    if (prev < rangeStart) {
+      setRangeStart((curr) => shiftColomboDate(curr, -1));
+    }
   };
 
   const handleNextDay = () => {
-    const [y, m, d] = selectedDate.split("-").map(Number);
-    const next = new Date(Date.UTC(y, m - 1, d + 1));
-    setSelectedDate(next.toISOString().slice(0, 10));
+    const next = shiftColomboDate(selectedDate, 1);
+    setSelectedDate(next);
+    if (next > rangeEnd) {
+      setRangeStart((curr) => shiftColomboDate(curr, 1));
+    }
   };
 
   const handleToday = () => {
-    setSelectedDate(getColomboTodayString());
+    const today = getColomboTodayString();
+    setSelectedDate(today);
   };
 
-  const dateStripItems = getColomboDateStrip(selectedDate, 10);
+  const dateStripItems = getColomboDateRange(rangeStart, VISIBLE_COUNT);
 
   // Handle slot click from timeline
   const handleSelectSlot = (resId: string, slotTime: string) => {
@@ -205,12 +225,7 @@ export function ReservationCalendarView({
             </div>
             <div className="ml-1">
               <h3 className="text-sm font-bold text-slate-900">
-                {formatColomboDate(selectedDate, {
-                  weekday: "long",
-                  month: "long",
-                  day: "numeric",
-                  year: "numeric",
-                })}
+                {formatColomboFullDate(selectedDate)}
               </h3>
               <p className="text-[11px] text-slate-400">
                 Asia/Colombo Standard Time (UTC+05:30)

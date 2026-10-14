@@ -65,6 +65,48 @@ export function formatColomboInterval(start: Date | string, end: Date | string):
 }
 
 /**
+ * Formats a Date or ISO string into British English full date e.g. "Wednesday, 14 October 2026"
+ */
+export function formatColomboFullDate(date: Date | string): string {
+  const d = typeof date === "string" ? new Date(date) : date;
+  return new Intl.DateTimeFormat("en-GB", {
+    timeZone: BUSINESS_TIME_ZONE,
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  }).format(d);
+}
+
+/**
+ * Returns an array of date objects starting from a specific start date for count days.
+ * Unlike getColomboDateStrip, this does not recalculate an offset around a center date,
+ * ensuring the visible cards remain fixed in place when a date is selected.
+ */
+export function getColomboDateRange(startDateStr: string, count = 12) {
+  const [year, month, day] = startDateStr.split("-").map(Number);
+  const base = new Date(Date.UTC(year, month - 1, day, 12, 0, 0));
+
+  const items = [];
+  for (let i = 0; i < count; i++) {
+    const d = new Date(base.getTime() + i * 86_400_000);
+    const dateStr = d.toISOString().slice(0, 10);
+    const weekday = new Intl.DateTimeFormat("en-US", { timeZone: BUSINESS_TIME_ZONE, weekday: "short" }).format(d);
+    const dayNum = new Intl.DateTimeFormat("en-US", { timeZone: BUSINESS_TIME_ZONE, day: "numeric" }).format(d);
+    const monthStr = new Intl.DateTimeFormat("en-US", { timeZone: BUSINESS_TIME_ZONE, month: "short" }).format(d);
+
+    items.push({
+      dateStr,
+      day: weekday,
+      dateNum: parseInt(dayNum, 10),
+      month: monthStr,
+      isToday: isColomboDateToday(dateStr),
+    });
+  }
+  return items;
+}
+
+/**
  * Returns an array of date objects for a multi-day strip around a center date.
  */
 export function getColomboDateStrip(centerDateStr: string, count = 12) {

@@ -83,18 +83,18 @@ export function DashboardFullCalendar({
   };
 
   return (
-    <div className="bg-white rounded-2xl border border-[#E5E7EB] shadow-2xs p-5 space-y-4">
+    <div className="bg-white rounded-2xl border border-[#E5E7EB] shadow-2xs p-4 sm:p-4.5 space-y-3">
       {/* Calendar Header with Month Selector */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2.5">
-          <div className="h-9 w-9 rounded-xl bg-blue-50 border border-blue-100 flex items-center justify-center text-blue-600 shadow-2xs">
-            <CalendarIcon className="h-4.5 w-4.5" />
+          <div className="h-8 w-8 rounded-xl bg-blue-50 border border-blue-100 flex items-center justify-center text-blue-600 shadow-2xs">
+            <CalendarIcon className="h-4 w-4" />
           </div>
           <div>
             <h3 className="font-bold text-slate-900 text-sm">
               {MONTH_NAMES[month - 1]} {year}
             </h3>
-            <p className="text-[11px] text-slate-400">
+            <p className="text-[10px] text-slate-400">
               Asia/Colombo · Select date to inspect schedule
             </p>
           </div>
@@ -106,7 +106,7 @@ export function DashboardFullCalendar({
             variant="outline"
             size="sm"
             onClick={handleTodayClick}
-            className="h-8 px-2.5 text-xs font-semibold text-slate-700 hover:text-blue-600 rounded-lg border-slate-200 shadow-2xs"
+            className="h-7 px-2 text-[11px] font-semibold text-slate-700 hover:text-blue-600 rounded-lg border-slate-200 shadow-2xs"
           >
             Today
           </Button>
@@ -116,19 +116,19 @@ export function DashboardFullCalendar({
               type="button"
               onClick={handlePrevMonth}
               disabled={isLoading}
-              className="h-8 w-8 rounded-lg border border-slate-200 hover:bg-slate-50 flex items-center justify-center text-slate-600 hover:text-slate-900 transition-colors shadow-2xs disabled:opacity-50"
+              className="h-7 w-7 rounded-lg border border-slate-200 hover:bg-slate-50 flex items-center justify-center text-slate-600 hover:text-slate-900 transition-colors shadow-2xs disabled:opacity-50"
               title="Previous Month"
             >
-              <ChevronLeft className="h-4 w-4" />
+              <ChevronLeft className="h-3.5 w-3.5" />
             </button>
             <button
               type="button"
               onClick={handleNextMonth}
               disabled={isLoading}
-              className="h-8 w-8 rounded-lg border border-slate-200 hover:bg-slate-50 flex items-center justify-center text-slate-600 hover:text-slate-900 transition-colors shadow-2xs disabled:opacity-50"
+              className="h-7 w-7 rounded-lg border border-slate-200 hover:bg-slate-50 flex items-center justify-center text-slate-600 hover:text-slate-900 transition-colors shadow-2xs disabled:opacity-50"
               title="Next Month"
             >
-              <ChevronRight className="h-4 w-4" />
+              <ChevronRight className="h-3.5 w-3.5" />
             </button>
           </div>
         </div>
@@ -139,18 +139,18 @@ export function DashboardFullCalendar({
         {WEEKDAYS.map((day) => (
           <div
             key={day}
-            className="text-[11px] font-bold text-slate-400 uppercase tracking-wider py-1.5"
+            className="text-[10px] font-bold text-slate-400 uppercase tracking-wider py-1"
           >
             {day}
           </div>
         ))}
       </div>
 
-      {/* Days Grid */}
+      {/* Days Grid (Compact h-10 / h-10.5 cells) */}
       <div className="grid grid-cols-7 gap-1 text-center">
         {/* Leading empty cells */}
         {Array.from({ length: startOffset }).map((_, i) => (
-          <div key={`empty-${i}`} className="h-13 rounded-xl bg-slate-50/40 opacity-40" />
+          <div key={`empty-${i}`} className="h-10 sm:h-10.5 rounded-lg bg-slate-50/40 opacity-40" />
         ))}
 
         {/* Month Day Cells */}
@@ -171,7 +171,7 @@ export function DashboardFullCalendar({
               key={dateStr}
               type="button"
               onClick={() => onSelectDate(dateStr)}
-              className={`h-13 rounded-xl flex flex-col items-center justify-between py-1.5 px-1 transition-all relative select-none group focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+              className={`h-10 sm:h-10.5 rounded-lg flex flex-col items-center justify-between py-1 px-1 transition-all relative select-none group focus:outline-none focus:ring-2 focus:ring-blue-500 ${
                 isSelected
                   ? "bg-blue-600 text-white shadow-xs font-bold"
                   : isToday
@@ -179,9 +179,9 @@ export function DashboardFullCalendar({
                   : "bg-white hover:bg-slate-50 border border-slate-100 text-slate-700 font-medium"
               }`}
             >
-              <div className="flex items-center justify-between w-full px-1">
+              <div className="flex items-center justify-between w-full px-0.5">
                 <span
-                  className={`text-xs ${
+                  className={`text-[11px] sm:text-xs leading-none ${
                     isSelected
                       ? "text-white"
                       : isToday
@@ -193,14 +193,14 @@ export function DashboardFullCalendar({
                 </span>
 
                 {isToday && !isSelected && (
-                  <span className="text-[9px] font-bold text-blue-600 bg-blue-100 px-1 rounded-sm">
+                  <span className="text-[8px] font-bold text-blue-600 bg-blue-100 px-0.5 rounded-xs leading-tight">
                     Today
                   </span>
                 )}
               </div>
 
               {/* Activity Indicator Dots */}
-              <div className="flex items-center justify-center gap-1 min-h-[6px] w-full">
+              <div className="flex items-center justify-center gap-1 min-h-[5px] w-full">
                 {totalScheduled > 0 ? (
                   <div className="flex items-center gap-1">
                     {hasApproved && (
@@ -236,8 +236,8 @@ export function DashboardFullCalendar({
       </div>
 
       {/* Activity Legend */}
-      <div className="flex items-center justify-between pt-2 border-t border-slate-100 text-[11px] text-slate-500">
-        <div className="flex items-center gap-4">
+      <div className="flex items-center justify-between pt-2 border-t border-slate-100 text-[10px] text-slate-500">
+        <div className="flex items-center gap-3">
           <div className="flex items-center gap-1.5">
             <span className="h-2 w-2 rounded-full bg-emerald-500" />
             <span>Approved</span>

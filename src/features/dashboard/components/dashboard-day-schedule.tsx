@@ -14,7 +14,7 @@ import {
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import {
-  formatColomboDate,
+  formatColomboFullDate,
   formatColomboInterval,
 } from "@/features/reservations/utils/client-date";
 import { getDepartmentColorScheme } from "@/features/departments/utils/department-colors";
@@ -63,15 +63,10 @@ export function DashboardDaySchedule({
   isLoading = false,
   onNewReservation,
 }: DashboardDayScheduleProps) {
-  const formattedDate = formatColomboDate(selectedDate, {
-    weekday: "long",
-    month: "long",
-    day: "numeric",
-    year: "numeric",
-  });
+  const formattedDate = formatColomboFullDate(selectedDate);
 
   return (
-    <div className="bg-white rounded-2xl border border-[#E5E7EB] shadow-2xs p-5 space-y-4 flex flex-col h-full">
+    <div className="bg-white rounded-2xl border border-[#E5E7EB] shadow-2xs p-4 sm:p-4.5 space-y-3 flex flex-col h-full">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-slate-100">
         <div>

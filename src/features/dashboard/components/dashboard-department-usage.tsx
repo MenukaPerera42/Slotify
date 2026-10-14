@@ -30,18 +30,18 @@ export function DashboardDepartmentUsage({
     const totalOrgHours = departmentsUsage.reduce((sum, d) => sum + d.bookedHours, 0);
 
     return (
-      <div className="bg-white rounded-2xl border border-[#E5E7EB] shadow-2xs p-5 space-y-4">
+      <div className="bg-white rounded-2xl border border-[#E5E7EB] shadow-2xs p-4 sm:p-4.5 space-y-3">
         {/* Header */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2.5">
-            <div className="h-9 w-9 rounded-xl bg-purple-50 border border-purple-100 flex items-center justify-center text-purple-600 shadow-2xs">
-              <Briefcase className="h-4.5 w-4.5" />
+            <div className="h-8 w-8 rounded-xl bg-purple-50 border border-purple-100 flex items-center justify-center text-purple-600 shadow-2xs">
+              <Briefcase className="h-4 w-4" />
             </div>
             <div>
               <h3 className="font-bold text-slate-900 text-sm">
                 Department Utilization
               </h3>
-              <p className="text-[11px] text-slate-400">
+              <p className="text-[10px] text-slate-400">
                 Approved reservation hours by organizational unit
               </p>
             </div>
@@ -126,18 +126,18 @@ export function DashboardDepartmentUsage({
 
   // If MEMBER: Show Resource Catalog & Quick Reservation Links
   return (
-    <div className="bg-white rounded-2xl border border-[#E5E7EB] shadow-2xs p-5 space-y-4">
+    <div className="bg-white rounded-2xl border border-[#E5E7EB] shadow-2xs p-4 sm:p-4.5 space-y-3">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2.5">
-          <div className="h-9 w-9 rounded-xl bg-blue-50 border border-blue-100 flex items-center justify-center text-blue-600 shadow-2xs">
-            <Layers className="h-4.5 w-4.5" />
+          <div className="h-8 w-8 rounded-xl bg-blue-50 border border-blue-100 flex items-center justify-center text-blue-600 shadow-2xs">
+            <Layers className="h-4 w-4" />
           </div>
           <div>
             <h3 className="font-bold text-slate-900 text-sm">
               Resource Catalog
             </h3>
-            <p className="text-[11px] text-slate-400">
+            <p className="text-[10px] text-slate-400">
               {totalActiveResources} operational facilities ready for booking
             </p>
           </div>

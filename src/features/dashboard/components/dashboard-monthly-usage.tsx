@@ -37,18 +37,18 @@ export function DashboardMonthlyUsage({
   }, [days]);
 
   return (
-    <div className="bg-white rounded-2xl border border-[#E5E7EB] shadow-2xs p-5 space-y-4">
+    <div className="bg-white rounded-2xl border border-[#E5E7EB] shadow-2xs p-4 sm:p-4.5 space-y-3">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
         <div className="flex items-center gap-2.5">
-          <div className="h-9 w-9 rounded-xl bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600 shadow-2xs">
-            <BarChart3 className="h-4.5 w-4.5" />
+          <div className="h-8 w-8 rounded-xl bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600 shadow-2xs">
+            <BarChart3 className="h-4 w-4" />
           </div>
           <div>
             <h3 className="font-bold text-slate-900 text-sm">
               Monthly Booking Volume
             </h3>
-            <p className="text-[11px] text-slate-400">
+            <p className="text-[10px] text-slate-400">
               Daily approved booked hours for {MONTH_NAMES[month - 1]} {year}
             </p>
           </div>

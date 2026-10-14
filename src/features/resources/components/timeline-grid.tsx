@@ -23,6 +23,7 @@ import {
   formatSlotLabel,
   formatColomboInterval,
   formatColomboDate,
+  formatColomboFullDate,
 } from "@/features/reservations/utils/client-date";
 import {
   getDepartmentColorScheme,
@@ -189,6 +190,23 @@ export function TimelineGrid({
   return (
     <div className="space-y-2">
       <div className="bg-white rounded-2xl border border-[#E5E7EB] shadow-2xs overflow-hidden">
+        {/* Full Date & Timezone Header Banner */}
+        <div className="px-4 py-2.5 bg-slate-50/70 border-b border-[#E5E7EB] flex flex-wrap items-center justify-between gap-2 text-xs">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="font-bold text-slate-800">
+              {formatColomboFullDate(selectedDate)}
+            </span>
+            <span className="text-slate-300">•</span>
+            <span className="text-[11px] font-medium text-slate-500">
+              Asia/Colombo Standard Time (UTC+05:30)
+            </span>
+          </div>
+          <div className="flex items-center gap-1.5 text-[11px] font-medium text-slate-500">
+            <Clock className="h-3.5 w-3.5 text-slate-400" />
+            <span>9:00 AM – 6:00 PM</span>
+          </div>
+        </div>
+
         {isLoading ? (
           <div className="py-16 text-center text-xs text-slate-400">
             Loading schedule...

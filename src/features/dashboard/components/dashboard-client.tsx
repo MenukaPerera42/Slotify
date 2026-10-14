@@ -337,10 +337,10 @@ export function DashboardClient({
         {/* 1. All-time Stat Cards */}
         <DashboardSummaryCards summary={summary} />
 
-        {/* 2. Interactive Full-Month Calendar & Selected Day Schedule */}
+        {/* 2. Main Balanced 2-Column Dashboard Grid */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-          {/* Full-Month Calendar Grid (7 cols) */}
-          <div className="lg:col-span-7">
+          {/* Desktop Left Column (7 cols): Full-Month Calendar + Monthly Booking Volume Chart */}
+          <div className="lg:col-span-7 space-y-6">
             <DashboardFullCalendar
               year={year}
               month={month}
@@ -350,25 +350,7 @@ export function DashboardClient({
               onSelectDate={handleSelectDate}
               onChangeMonth={handleChangeMonth}
             />
-          </div>
 
-          {/* Selected-Date Quick View (5 cols) */}
-          <div className="lg:col-span-5">
-            <DashboardDaySchedule
-              selectedDate={selectedDate}
-              daySummary={daySummary}
-              items={dayScheduleItems}
-              isAdmin={isAdmin}
-              isLoading={isDayLoading}
-              onNewReservation={() => setIsBookingModalOpen(true)}
-            />
-          </div>
-        </div>
-
-        {/* 3. Monthly Booking Volume Chart & Department / Category Usage */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-          {/* Monthly Usage Hours Chart (7 cols) */}
-          <div className="lg:col-span-7">
             <DashboardMonthlyUsage
               year={year}
               month={month}
@@ -379,8 +361,17 @@ export function DashboardClient({
             />
           </div>
 
-          {/* Department Breakdown or Resource Categories (5 cols) */}
-          <div className="lg:col-span-5">
+          {/* Desktop Right Column (5 cols): Selected-Date Quick View + Department / Resource Usage */}
+          <div className="lg:col-span-5 space-y-6">
+            <DashboardDaySchedule
+              selectedDate={selectedDate}
+              daySummary={daySummary}
+              items={dayScheduleItems}
+              isAdmin={isAdmin}
+              isLoading={isDayLoading}
+              onNewReservation={() => setIsBookingModalOpen(true)}
+            />
+
             <DashboardDepartmentUsage
               isAdmin={isAdmin}
               departmentsUsage={departmentUsage}
