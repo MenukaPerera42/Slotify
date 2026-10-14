@@ -1,15 +1,10 @@
 import { AppHeader } from "@/components/layout/app-header";
 import { requireUser } from "@/lib/authorization";
-import { prisma } from "@/lib/prisma";
+import { listReservations } from "@/features/reservations/services/reservation-service";
 
 export default async function ReservationsPage() {
   const user = await requireUser();
-  const reservations = await prisma.reservation.findMany({
-    where: user.role === "ADMIN" ? {} : { userId: user.id },
-    include: { resource: { select: { name: true } }, user: { select: { name: true } } },
-    orderBy: { startTime: "desc" },
-    take: 100,
-  });
+  const { items: reservations } = await listReservations({ page: 1, pageSize: 100, sort: "desc" }, user.role === "ADMIN" ? "all" : "own");
   return <>
     <AppHeader title={user.role === "ADMIN" ? "Reservations" : "My Reservations"} description="Reservation history and current status. Booking requests arrive in Stage 5." />
     <main className="w-full max-w-5xl mx-auto p-6 space-y-4">

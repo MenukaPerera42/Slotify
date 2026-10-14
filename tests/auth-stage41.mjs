@@ -17,6 +17,13 @@ const raceEmail = `stage41-race-${stamp}@example.test`;
 const password = `Strong-${randomBytes(18).toString("base64url")}`;
 const rateAddressBytes = randomBytes(2);
 const signupRateAddress = `198.18.${rateAddressBytes[0]}.${rateAddressBytes[1]}`;
+const addressNamespace = randomBytes(1)[0];
+function isolatedAddress(address) {
+  if (address.startsWith("192.0.2.") || address.startsWith("198.51.100.")) {
+    return `198.19.${addressNamespace}.${address.split(".").at(-1)}`;
+  }
+  return address;
+}
 const prisma = new PrismaClient();
 const testEmails = [memberEmail, raceEmail];
 
@@ -28,7 +35,7 @@ function cookieHeader(jar) {
 }
 async function action(id, args, path, address, jar = {}) {
   const body = await encodeReply(args);
-  const headers = { "Next-Action": id, Origin: base, "x-forwarded-for": address, Cookie: cookieHeader(jar) };
+  const headers = { "Next-Action": id, Origin: base, "x-forwarded-for": isolatedAddress(address), Cookie: cookieHeader(jar) };
   if (typeof body === "string") headers["Content-Type"] = "text/plain;charset=UTF-8";
   const response = await fetch(`${base}${path}`, { method: "POST", headers, body, redirect: "manual" });
   return { response, text: await response.text() };
@@ -39,6 +46,7 @@ async function signup(fields, address) {
   return action(signupId, [{}, data], "/signup", address);
 }
 async function login(email, secret, address) {
+  address = isolatedAddress(address);
   const jar = {};
   const csrfResponse = await fetch(`${base}/api/auth/csrf`, { headers: { "x-forwarded-for": address } });
   Object.assign(jar, cookies(csrfResponse));

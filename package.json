@@ -9,6 +9,7 @@
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
     "test:auth": "node --env-file=.env tests/auth-stage41.mjs",
+    "test:reservations": "node --env-file=.env --import tsx tests/reservations-stage5a.mjs",
     "format": "prettier --write .",
     "db:seed": "node --env-file=.env --import tsx prisma/seed.ts",
     "db:setup-demo": "node --import tsx prisma/setup-demo-credentials.ts",
