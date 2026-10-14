@@ -9,20 +9,29 @@ async function main() {
   const adminPassword = process.env.SLOTIFY_DEMO_ADMIN_PASSWORD;
   const memberPassword = process.env.SLOTIFY_DEMO_MEMBER_PASSWORD;
   const ensureDemoUser = async (name: string, email: string, role: UserRole, password?: string) => {
-    const existing = await prisma.user.findUnique({ where: { email } });
+    let existing = await prisma.user.findUnique({ where: { email } });
+    if (!existing && email === "adminslotify@gmail.com") {
+      const legacyAdmin = await prisma.user.findUnique({ where: { email: "alex.admin@primewave.local" } });
+      if (legacyAdmin) {
+        existing = await prisma.user.update({
+          where: { id: legacyAdmin.id },
+          data: { email: "adminslotify@gmail.com" },
+        });
+      }
+    }
     if (existing && role === UserRole.ADMIN && existing.role !== UserRole.ADMIN) {
       throw new Error(`The existing ${email} account is not an admin. Review it before seeding.`);
     }
     if (existing?.passwordHash) return existing;
-    if (!password || password.length < 12) {
-      throw new Error(`Set the 12+ character demo password environment variable before provisioning ${email}.`);
+    if (!password || password.length < 6) {
+      throw new Error(`Set the 6+ character demo password environment variable before provisioning ${email}.`);
     }
     const passwordHash = await hash(password);
     return existing
       ? prisma.user.update({ where: { id: existing.id }, data: { passwordHash } })
       : prisma.user.create({ data: { name, email, role, passwordHash } });
   };
-  const alexAdmin = await ensureDemoUser("Alex Vance", "alex.admin@primewave.local", UserRole.ADMIN, adminPassword);
+  const alexAdmin = await ensureDemoUser("Alex Vance", "adminslotify@gmail.com", UserRole.ADMIN, adminPassword);
   const sarahMember = await ensureDemoUser("Sarah Chen", "sarah.chen@primewave.local", UserRole.MEMBER, memberPassword);
   const davidMember = await ensureDemoUser("David Kim", "david.kim@primewave.local", UserRole.MEMBER, memberPassword);
   const emilyMember = await ensureDemoUser("Emily Watson", "emily.watson@primewave.local", UserRole.MEMBER, memberPassword);

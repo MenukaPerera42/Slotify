@@ -2,6 +2,7 @@ import { PrismaClient } from "@prisma/client";
 import { hash } from "argon2";
 
 const accounts: Record<string, string> = {
+  "adminslotify@gmail.com": "SLOTIFY_DEMO_ADMIN_PASSWORD",
   "alex.admin@primewave.local": "SLOTIFY_DEMO_ADMIN_PASSWORD",
   "sarah.chen@primewave.local": "SLOTIFY_DEMO_MEMBER_PASSWORD",
   "david.kim@primewave.local": "SLOTIFY_DEMO_MEMBER_PASSWORD",
@@ -13,7 +14,7 @@ async function main() {
   const variable = accounts[email];
   if (!variable) throw new Error("Specify one of the documented local demo account emails.");
   const password = process.env[variable];
-  if (!password || password.length < 12) throw new Error(`Set ${variable} to a 12+ character value in .env.`);
+  if (!password || password.length < 6) throw new Error(`Set ${variable} to a 6+ character value in .env.`);
   const prisma = new PrismaClient();
   try {
     await prisma.user.update({

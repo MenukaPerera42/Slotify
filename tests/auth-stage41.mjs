@@ -10,7 +10,7 @@ const signupId = Object.entries(manifest.node).find(([, entry]) => entry.exporte
 const resourceId = Object.entries(manifest.node).find(([, entry]) => entry.exportedName === "createResourceAction")?.[0];
 assert.ok(signupId && resourceId, "Build the app before running this test");
 
-const base = process.env.SLOTIFY_TEST_URL ?? "http://localhost:3100";
+const base = process.env.SLOTIFY_TEST_URL ?? "http://localhost:3000";
 const stamp = `${Date.now()}-${randomBytes(4).toString("hex")}`;
 const memberEmail = `stage41-${stamp}@example.test`;
 const raceEmail = `stage41-race-${stamp}@example.test`;
@@ -69,9 +69,20 @@ try {
 
   const fields = { name: "Stage Test Member", email: memberEmail, password, confirmPassword: password };
   assert.match((await signup({ ...fields, email: "bad-email" }, `192.0.2.${Math.floor(Math.random() * 100) + 1}`)).text, /fieldErrors.*email/);
-  assert.match((await signup({ ...fields, password: "short", confirmPassword: "short" }, "192.0.2.101")).text, /at least 12 characters/);
+  assert.match((await signup({ ...fields, password: "short", confirmPassword: "short" }, "192.0.2.101")).text, /at least 6 characters/);
   assert.match((await signup({ ...fields, confirmPassword: "wrong" }, "192.0.2.102")).text, /Passwords do not match/);
-  pass("invalid email, weak password, mismatch");
+  pass("invalid email, weak password (<6 chars), mismatch");
+
+  // Verify 6-character password is accepted
+  const sixCharPass = "pass12";
+  const sixCharEmail = `stage42-six-${stamp}@example.test`;
+  testEmails.push(sixCharEmail);
+  const sixCharSignup = await signup({ name: "Six Char Member", email: sixCharEmail, password: sixCharPass, confirmPassword: sixCharPass }, "192.0.2.115");
+  assert.match(sixCharSignup.response.headers.get("x-action-redirect") ?? sixCharSignup.response.headers.get("location") ?? "", /\/login\?created=1/);
+  const sixCharUser = await prisma.user.findUniqueOrThrow({ where: { email: sixCharEmail } });
+  assert.equal(sixCharUser.role, "MEMBER");
+  assert.ok(sixCharUser.passwordHash?.startsWith("$argon2id$"));
+  pass("6-character password passes signup validation and creates MEMBER account");
 
   const created = await signup({ ...fields, email: `  ${memberEmail.toUpperCase()}  `, role: "ADMIN" }, "192.0.2.103");
   assert.match(created.response.headers.get("x-action-redirect") ?? created.response.headers.get("location") ?? "", /\/login\?created=1/);
@@ -118,10 +129,16 @@ try {
   await prisma.user.update({ where: { email: memberEmail }, data: { isActive: true } });
   pass("role changes and deactivation take effect on the next request");
 
-  const admin = await login("alex.admin@primewave.local", process.env.SLOTIFY_DEMO_ADMIN_PASSWORD, "192.0.2.109");
+  // Old admin email no longer authenticates
+  const oldAdmin = await login("alex.admin@primewave.local", process.env.SLOTIFY_DEMO_ADMIN_PASSWORD, "192.0.2.110");
+  assert.notEqual(oldAdmin.response.headers.get("location") ?? "", `${base}/dashboard`);
+  assert.match(oldAdmin.response.headers.get("location") ?? "", /error=CredentialsSignin/);
+
+  // Updated admin email authenticates and has ADMIN role
+  const admin = await login("adminslotify@gmail.com", process.env.SLOTIFY_DEMO_ADMIN_PASSWORD, "192.0.2.109");
   assert.equal(admin.response.status, 302);
   assert.equal((await page("/administration", admin.jar)).status, 200);
-  pass("existing admin login and administration access");
+  pass("updated admin login (adminslotify@gmail.com) succeeds and old admin is rejected");
 
   const csrfResponse = await fetch(`${base}/api/auth/csrf`, { headers: { Cookie: cookieHeader(member.jar) } });
   Object.assign(member.jar, cookies(csrfResponse));

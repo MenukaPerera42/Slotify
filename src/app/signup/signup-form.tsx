@@ -18,8 +18,8 @@ export function SignupForm() {
     {state.fieldErrors?.email && <p id="signup-email-error" className="text-xs text-rose-600">Enter a valid email address.</p>}
 
     <label htmlFor="signup-password" className="block text-sm font-medium text-slate-700">Password</label>
-    <input id="signup-password" name="password" type="password" autoComplete="new-password" required minLength={12} maxLength={128} aria-describedby="signup-password-help" className="-mt-2 block w-full rounded-lg border border-slate-300 px-3 py-2.5 outline-none focus:border-blue-600" />
-    <p id="signup-password-help" className="text-xs text-slate-500">Use at least 12 characters.</p>
+    <input id="signup-password" name="password" type="password" autoComplete="new-password" required minLength={6} maxLength={128} aria-describedby="signup-password-help" className="-mt-2 block w-full rounded-lg border border-slate-300 px-3 py-2.5 outline-none focus:border-blue-600" />
+    <p id="signup-password-help" className="text-xs text-slate-500">Minimum 6 characters. 8+ characters recommended for stronger security.</p>
     {state.fieldErrors?.password && <p className="text-xs text-rose-600">{state.fieldErrors.password[0]}</p>}
 
     <label htmlFor="signup-confirm" className="block text-sm font-medium text-slate-700">Confirm Password</label>

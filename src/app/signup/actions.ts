@@ -7,12 +7,13 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { emailSchema } from "@/features/auth/email-schema";
+import { passwordSchema } from "@/features/auth/password-schema";
 import { clientAddress, consumeRateLimit } from "@/lib/auth-rate-limit";
 
 const registrationSchema = z.object({
   name: z.string().trim().min(2, "Enter your full name.").max(80, "Name is too long."),
   email: emailSchema,
-  password: z.string().min(12, "Use at least 12 characters.").max(128, "Password is too long."),
+  password: passwordSchema,
   confirmPassword: z.string(),
 }).refine((value) => value.password === value.confirmPassword, {
   path: ["confirmPassword"], message: "Passwords do not match.",

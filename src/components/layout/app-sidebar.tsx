@@ -77,7 +77,7 @@ export function AppSidebar({ user }: { user: { name: string; email: string; role
           <div className="h-14 px-5 flex items-center">
             <Link
               href="/dashboard"
-              className="flex items-center gap-2 group"
+              className="flex items-center gap-2 group translate-y-[7px]"
               onClick={() => setMobileMenuOpen(false)}
             >
               <SlotifyLogo className="w-40" priority />
