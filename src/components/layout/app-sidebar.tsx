@@ -13,9 +13,10 @@ import {
   Bell,
   LogOut,
 } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
 import { logoutAction } from "@/features/auth/actions";
+import { getUnreadNotificationCountAction } from "@/features/notifications/actions/notification-actions";
 import { SlotifyLogo } from "./slotify-logo";
 import { SlotifyIcon } from "./slotify-icon";
 
@@ -35,6 +36,22 @@ const baseNavigationItems = [
 export function AppSidebar({ user }: { user: { name: string; email: string; role: "ADMIN" | "MEMBER" } }) {
   const pathname = usePathname();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [unreadCount, setUnreadCount] = useState<number>(0);
+
+  useEffect(() => {
+    let isMounted = true;
+    getUnreadNotificationCountAction()
+      .then((res) => {
+        if (isMounted && res.success && typeof res.data === "number") {
+          setUnreadCount(res.data);
+        }
+      })
+      .catch(() => {});
+    return () => {
+      isMounted = false;
+    };
+  }, [pathname]);
+
   const navigationItems = [
     ...baseNavigationItems,
     { name: user.role === "ADMIN" ? "Reservations" : "My Reservations", href: "/reservations", icon: CalendarDays },
@@ -86,8 +103,8 @@ export function AppSidebar({ user }: { user: { name: string; email: string; role
             </Link>
           </div>
 
-          {/* Navigation Links */}
-          <nav className="px-3 py-2 space-y-1">
+          {/* Navigation Links with refined 14px vertical breathing space from logo */}
+          <nav className="px-3 pt-5 pb-2 space-y-1">
             {navigationItems.map((item) => {
               const Icon = item.icon;
               const isActive =
@@ -128,15 +145,56 @@ export function AppSidebar({ user }: { user: { name: string; email: string; role
             </span>
           </div>
 
-          <div className="px-3 space-y-0.5 text-xs text-slate-400">
-            <div className="flex items-center gap-3 px-3.5 py-1.5 rounded-xl text-slate-400 select-none">
-              <Zap className="h-4 w-4 text-slate-300" />
+          {/* Functional Quick Actions & Notifications Links */}
+          <div className="px-3 space-y-0.5 text-xs text-slate-600">
+            <Link
+              href="/quick-actions"
+              onClick={() => setMobileMenuOpen(false)}
+              className={cn(
+                "flex items-center gap-3 px-3.5 py-2 rounded-xl text-xs font-medium transition-all group",
+                pathname === "/quick-actions"
+                  ? "bg-blue-50 text-blue-600 font-semibold shadow-2xs"
+                  : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+              )}
+            >
+              <Zap
+                className={cn(
+                  "h-4 w-4 transition-colors",
+                  pathname === "/quick-actions"
+                    ? "text-blue-600"
+                    : "text-slate-400 group-hover:text-slate-600"
+                )}
+              />
               <span>Quick Actions</span>
-            </div>
-            <div className="flex items-center gap-3 px-3.5 py-1.5 rounded-xl text-slate-400 select-none">
-              <Bell className="h-4 w-4 text-slate-300" />
-              <span>Notifications</span>
-            </div>
+            </Link>
+
+            <Link
+              href="/notifications"
+              onClick={() => setMobileMenuOpen(false)}
+              className={cn(
+                "flex items-center justify-between px-3.5 py-2 rounded-xl text-xs font-medium transition-all group",
+                pathname === "/notifications"
+                  ? "bg-blue-50 text-blue-600 font-semibold shadow-2xs"
+                  : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+              )}
+            >
+              <div className="flex items-center gap-3">
+                <Bell
+                  className={cn(
+                    "h-4 w-4 transition-colors",
+                    pathname === "/notifications"
+                      ? "text-blue-600"
+                      : "text-slate-400 group-hover:text-slate-600"
+                  )}
+                />
+                <span>Notifications</span>
+              </div>
+              {unreadCount > 0 && (
+                <span className="px-1.5 py-0.5 rounded-full bg-blue-600 text-white text-[10px] font-bold leading-none shadow-2xs">
+                  {unreadCount > 99 ? "99+" : unreadCount}
+                </span>
+              )}
+            </Link>
           </div>
         </div>
 

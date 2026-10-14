@@ -9,9 +9,18 @@ const initialState: SignupState = {};
 export function SignupForm({ departments }: { departments: { id: string; name: string; code: string }[] }) {
   const [state, action, pending] = useActionState(signupAction, initialState);
   return <form action={action} className="space-y-4">
-    <label htmlFor="signup-name" className="block text-sm font-medium text-slate-700">Full Name</label>
-    <input id="signup-name" name="name" type="text" autoComplete="name" required maxLength={80} aria-describedby={state.fieldErrors?.name ? "signup-name-error" : undefined} className="-mt-2 block w-full rounded-lg border border-slate-300 px-3 py-2.5 outline-none focus:border-blue-600" />
-    {state.fieldErrors?.name && <p id="signup-name-error" className="text-xs text-rose-600">{state.fieldErrors.name[0]}</p>}
+    <div className="grid grid-cols-2 gap-3">
+      <div>
+        <label htmlFor="signup-first-name" className="block text-sm font-medium text-slate-700">First Name</label>
+        <input id="signup-first-name" name="firstName" type="text" autoComplete="given-name" required maxLength={80} aria-describedby={state.fieldErrors?.firstName ? "signup-first-name-error" : undefined} className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2.5 outline-none focus:border-blue-600 text-sm" />
+        {state.fieldErrors?.firstName && <p id="signup-first-name-error" className="text-xs text-rose-600 mt-1">{state.fieldErrors.firstName[0]}</p>}
+      </div>
+      <div>
+        <label htmlFor="signup-last-name" className="block text-sm font-medium text-slate-700">Last Name</label>
+        <input id="signup-last-name" name="lastName" type="text" autoComplete="family-name" required maxLength={80} aria-describedby={state.fieldErrors?.lastName ? "signup-last-name-error" : undefined} className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2.5 outline-none focus:border-blue-600 text-sm" />
+        {state.fieldErrors?.lastName && <p id="signup-last-name-error" className="text-xs text-rose-600 mt-1">{state.fieldErrors.lastName[0]}</p>}
+      </div>
+    </div>
 
     <label htmlFor="signup-email" className="block text-sm font-medium text-slate-700">Email Address</label>
     <input id="signup-email" name="email" type="email" autoComplete="email" required maxLength={254} aria-describedby={state.fieldErrors?.email ? "signup-email-error" : undefined} className="-mt-2 block w-full rounded-lg border border-slate-300 px-3 py-2.5 outline-none focus:border-blue-600" />

@@ -14,7 +14,12 @@ import {
   CheckCircle2,
   AlertCircle,
   Briefcase,
+  Edit3,
+  Loader2,
 } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { useToast } from "@/components/ui/toast";
+import { correctReservationDepartmentAction } from "@/features/reservations/actions/reservation-actions";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
@@ -83,11 +88,21 @@ export function TimelineGrid({
   onBrowseResources,
   isLoading = false,
 }: TimelineGridProps) {
+  const router = useRouter();
+  const toast = useToast();
+
   // Detail inspection modal state
   const [inspectBooking, setInspectBooking] = useState<{
     booking: ReservationOccupancy;
     resource: TimelineResourceItem;
   } | null>(null);
+
+  // Department correction form state inside inspection modal
+  const [isCorrectingDept, setIsCorrectingDept] = useState(false);
+  const [correctTargetDeptId, setCorrectTargetDeptId] = useState("");
+  const [correctReason, setCorrectReason] = useState("");
+  const [isSubmittingCorrection, setIsSubmittingCorrection] = useState(false);
+  const [selectedCorrectionResId, setSelectedCorrectionResId] = useState<string>("");
 
   // Time slots for header (09:00 to 17:30, 30-min steps = 18 columns = 9 hours, 09:00 to 18:00)
   const timeSlots = BUSINESS_TIME_SLOTS.slice(4, 22);
@@ -469,10 +484,10 @@ export function TimelineGrid({
                                     >
                                       {isNarrow
                                         ? isLegacy
-                                          ? "N/A"
+                                          ? "UNASSIGNED"
                                           : (dept?.code || colorScheme.code || "DEP").slice(0, 4)
                                         : isLegacy
-                                        ? "Unassigned"
+                                        ? "Legacy / Unassigned"
                                         : dept?.code || colorScheme.code}
                                     </span>
 
@@ -654,6 +669,188 @@ export function TimelineGrid({
                     </div>
                   </div>
                 )}
+
+                {/* Admin-only Department Review & Correction Affordance */}
+                <div className="pt-3 border-t border-slate-100">
+                  {!isCorrectingDept ? (
+                    <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 border border-slate-200">
+                      <div>
+                        <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">
+                          Department Allocation
+                        </span>
+                        <p className="text-xs text-slate-700">
+                          {inspectBooking.booking.departmentId
+                            ? "Reassign to another department"
+                            : "Review & assign unallocated booking"}
+                        </p>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          setIsCorrectingDept(true);
+                          setCorrectReason("");
+                          setCorrectTargetDeptId("");
+                          setSelectedCorrectionResId(
+                            inspectBooking.booking.id ||
+                              inspectBooking.booking.reservationIds?.[0] ||
+                              ""
+                          );
+                        }}
+                        className="h-7 text-xs font-semibold gap-1.5 border-slate-300 text-slate-700 hover:bg-slate-100"
+                      >
+                        <Edit3 className="h-3 w-3 text-slate-500" />
+                        {inspectBooking.booking.departmentId ? "Change Department" : "Assign Department"}
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="p-3 rounded-xl bg-blue-50/50 border border-blue-200 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                          <Briefcase className="h-3.5 w-3.5 text-blue-600" />
+                          Review Department Allocation
+                        </span>
+                        <span className="text-[10px] text-slate-500">
+                          Audit reason required
+                        </span>
+                      </div>
+
+                      {/* If multiple bookings, select which one */}
+                      {(inspectBooking.booking.reservationIds?.length ?? 1) > 1 && (
+                        <div>
+                          <label className="text-[10px] font-bold text-slate-600 block mb-1">
+                            Select Specific Booking
+                          </label>
+                          <select
+                            value={selectedCorrectionResId}
+                            onChange={(e) => setSelectedCorrectionResId(e.target.value)}
+                            className="h-8 w-full rounded-lg border border-slate-300 bg-white px-2 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-600"
+                          >
+                            {(inspectBooking.booking.bookings || []).map((b, i) => (
+                              <option key={b.id} value={b.id}>
+                                #{i + 1} {b.title || "Reservation"} ({b.id.slice(0, 8)}...)
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      )}
+
+                      {/* Department Select */}
+                      <div>
+                        <label className="text-[10px] font-bold text-slate-600 block mb-1">
+                          Target Department
+                        </label>
+                        <select
+                          value={correctTargetDeptId}
+                          onChange={(e) => setCorrectTargetDeptId(e.target.value)}
+                          className="h-8 w-full rounded-lg border border-slate-300 bg-white px-2 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-600"
+                        >
+                          <option value="">Select an active department...</option>
+                          {departments
+                            .filter((d) => d.id !== inspectBooking.booking.departmentId)
+                            .map((d) => (
+                              <option key={d.id} value={d.id}>
+                                {d.name} ({d.code})
+                              </option>
+                            ))}
+                        </select>
+                      </div>
+
+                      {/* Audit Reason */}
+                      <div>
+                        <div className="flex items-center justify-between mb-1">
+                          <label className="text-[10px] font-bold text-slate-600">
+                            Audit Reason (10–500 chars)
+                          </label>
+                          <span
+                            className={cn(
+                              "text-[9px]",
+                              correctReason.trim().length >= 10 &&
+                                correctReason.trim().length <= 500
+                                ? "text-emerald-600 font-medium"
+                                : "text-slate-400"
+                            )}
+                          >
+                            {correctReason.trim().length}/500 (min 10)
+                          </span>
+                        </div>
+                        <textarea
+                          value={correctReason}
+                          onChange={(e) => setCorrectReason(e.target.value)}
+                          placeholder="State reason for department review or correction (minimum 10 characters)..."
+                          rows={2}
+                          className="w-full rounded-lg border border-slate-300 bg-white p-2 text-xs text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-600 resize-none"
+                        />
+                      </div>
+
+                      {/* Action buttons */}
+                      <div className="flex items-center justify-end gap-2 pt-1">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setIsCorrectingDept(false)}
+                          disabled={isSubmittingCorrection}
+                          className="h-7 text-xs text-slate-600 hover:bg-slate-100"
+                        >
+                          Cancel
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          disabled={
+                            isSubmittingCorrection ||
+                            !correctTargetDeptId ||
+                            correctReason.trim().length < 10 ||
+                            correctReason.trim().length > 500
+                          }
+                          onClick={async () => {
+                            const resId =
+                              selectedCorrectionResId ||
+                              inspectBooking.booking.id ||
+                              inspectBooking.booking.reservationIds?.[0];
+                            if (!resId || !correctTargetDeptId) return;
+
+                            setIsSubmittingCorrection(true);
+                            try {
+                              const res = await correctReservationDepartmentAction({
+                                reservationId: resId,
+                                expectedDepartmentId:
+                                  inspectBooking.booking.departmentId || null,
+                                departmentId: correctTargetDeptId,
+                                reason: correctReason.trim(),
+                              });
+
+                              if (res.success) {
+                                toast.success(
+                                  "Department allocation corrected successfully."
+                                );
+                                setIsCorrectingDept(false);
+                                setInspectBooking(null);
+                                router.refresh();
+                              } else {
+                                toast.error(
+                                  res.error || "Failed to correct department."
+                                );
+                              }
+                            } catch {
+                              toast.error("An unexpected error occurred.");
+                            } finally {
+                              setIsSubmittingCorrection(false);
+                            }
+                          }}
+                          className="h-7 text-xs font-semibold bg-blue-600 hover:bg-blue-700 text-white gap-1.5"
+                        >
+                          {isSubmittingCorrection && (
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                          )}
+                          Save Correction
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
             ) : (
               /* Privacy-Safe Notice for Members */

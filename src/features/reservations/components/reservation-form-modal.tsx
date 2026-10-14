@@ -344,63 +344,70 @@ export function ReservationFormModal({
       isOpen={isOpen}
       onClose={onClose}
       title="Request Reservation"
-      description="Select a resource, specify your booking time in Asia/Colombo time, and submit your request."
-      className="max-w-lg"
+      description="Specify reservation parameters in Asia/Colombo business time (09:00 - 18:00)."
+      className="max-w-2xl sm:max-w-[720px] w-full p-6 sm:p-7"
     >
-      <form onSubmit={handleSubmit} className="space-y-4">
+      <form onSubmit={handleSubmit} className="space-y-5">
         {errorMessage && (
-          <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs flex items-start gap-2">
-            <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
-            <div className="flex-1">{errorMessage}</div>
+          <div className="p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs flex items-start gap-2.5 animate-in fade-in">
+            <AlertCircle className="h-4 w-4 shrink-0 mt-0.5 text-rose-600" />
+            <div className="flex-1 font-medium">{errorMessage}</div>
           </div>
         )}
 
-        {/* Member Department Warning Banner (Phase 6) */}
+        {/* Member Department Warning Banner */}
         {!isAdmin && isAssignmentRequired && (
           <div className="p-3.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-xs space-y-1.5">
             <div className="flex items-center gap-1.5 font-bold text-amber-900">
               <ShieldAlert className="h-4 w-4 text-amber-600" />
               <span>Department Assignment Required</span>
             </div>
-            <p className="text-amber-700 leading-relaxed">
+            <p className="text-amber-700 leading-relaxed text-[11px]">
               Your account does not currently have an assigned organizational department.
               A valid department assignment is required before you can request resource reservations.
-              Please contact your system administrator to assign your account to a department.
+              Please contact your system administrator to assign your account.
             </p>
           </div>
         )}
 
-        {/* Member Assigned Department Read-Only Indicator (Phase 6) */}
+        {/* Member Assigned Department Read-Only Indicator */}
         {!isAdmin && !isAssignmentRequired && myDepartment && (
           <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 text-xs flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Briefcase className="h-4 w-4 text-slate-500" />
-              <span className="font-semibold text-slate-700">Department:</span>
+              <span className="font-semibold text-slate-700">Booking Department:</span>
               <span className="font-bold text-slate-900">
                 {myDepartment.name} ({myDepartment.code})
               </span>
             </div>
             <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200">
-              Assigned Department
+              Verified Member
             </span>
           </div>
         )}
 
-        {/* Admin 3-Mode Selector (Phase 7) */}
+        {/* SECTION A & B: Admin Booking Mode & Target Allocation */}
         {isAdmin && (
-          <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 space-y-2.5">
-            <label className="text-xs font-semibold text-slate-800 flex items-center gap-1.5">
-              <UserCheck className="h-3.5 w-3.5 text-blue-600" />
-              Admin Booking Mode
-            </label>
-            <div className="grid grid-cols-3 gap-1.5">
+          <div className="p-4 rounded-xl bg-slate-50/80 border border-slate-200 space-y-3.5">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                <UserCheck className="h-4 w-4 text-blue-600" />
+                <span>Admin Booking Mode</span>
+              </label>
+              <span className="text-[10px] font-medium text-slate-400">
+                Direct Administrator Override
+              </span>
+            </div>
+
+            {/* 3-Button Segmented Mode Selector */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
               <button
                 type="button"
                 onClick={() => handleAdminModeChange("self")}
-                className={`py-1.5 px-2 rounded-lg text-xs font-semibold transition-all border text-center ${
+                className={`py-2 px-3 rounded-xl text-xs font-semibold transition-all border text-center ${
                   adminMode === "self"
-                    ? "bg-white text-blue-700 border-blue-200 shadow-2xs"
-                    : "bg-transparent text-slate-600 border-transparent hover:bg-slate-100"
+                    ? "bg-white text-blue-700 border-blue-300 shadow-2xs ring-1 ring-blue-300/40"
+                    : "bg-slate-100/70 text-slate-600 border-slate-200/80 hover:bg-white hover:text-slate-900"
                 }`}
               >
                 Mode A: Myself
@@ -408,10 +415,10 @@ export function ReservationFormModal({
               <button
                 type="button"
                 onClick={() => handleAdminModeChange("user")}
-                className={`py-1.5 px-2 rounded-lg text-xs font-semibold transition-all border text-center ${
+                className={`py-2 px-3 rounded-xl text-xs font-semibold transition-all border text-center ${
                   adminMode === "user"
-                    ? "bg-white text-blue-700 border-blue-200 shadow-2xs"
-                    : "bg-transparent text-slate-600 border-transparent hover:bg-slate-100"
+                    ? "bg-white text-blue-700 border-blue-300 shadow-2xs ring-1 ring-blue-300/40"
+                    : "bg-slate-100/70 text-slate-600 border-slate-200/80 hover:bg-white hover:text-slate-900"
                 }`}
               >
                 Mode B: For User
@@ -419,38 +426,39 @@ export function ReservationFormModal({
               <button
                 type="button"
                 onClick={() => handleAdminModeChange("dept")}
-                className={`py-1.5 px-2 rounded-lg text-xs font-semibold transition-all border text-center ${
+                className={`py-2 px-3 rounded-xl text-xs font-semibold transition-all border text-center ${
                   adminMode === "dept"
-                    ? "bg-white text-blue-700 border-blue-200 shadow-2xs"
-                    : "bg-transparent text-slate-600 border-transparent hover:bg-slate-100"
+                    ? "bg-white text-blue-700 border-blue-300 shadow-2xs ring-1 ring-blue-300/40"
+                    : "bg-slate-100/70 text-slate-600 border-slate-200/80 hover:bg-white hover:text-slate-900"
                 }`}
               >
                 Mode C: Department Only
               </button>
             </div>
 
-            {/* Mode Explanation & Inputs */}
+            {/* Mode A Description */}
             {adminMode === "self" && (
-              <div className="text-[11px] text-slate-600">
+              <div className="text-xs text-slate-600 pt-1">
                 {myDepartment ? (
-                  <span>
-                    Directly approved under your assigned department:{" "}
-                    <strong>{myDepartment.name} ({myDepartment.code})</strong>.
-                  </span>
+                  <p className="text-[11px]">
+                    Directly approved under your administrative department:{" "}
+                    <strong className="text-slate-900">{myDepartment.name} ({myDepartment.code})</strong>.
+                  </p>
                 ) : (
-                  <span className="text-amber-700 font-medium">
-                    ⚠ Your account is unassigned. Please assign your department in Administration or choose Mode C.
-                  </span>
+                  <p className="text-[11px] text-amber-700 font-medium">
+                    ⚠ Your administrator account has no department assigned. Please assign a department in Administration or choose Mode C.
+                  </p>
                 )}
               </div>
             )}
 
+            {/* Mode B: 2-Column Fields for Department + Target User */}
             {adminMode === "user" && (
-              <div className="space-y-2 pt-1 border-t border-slate-200/80">
+              <div className="pt-2 border-t border-slate-200/80 space-y-2">
                 <p className="text-[11px] text-slate-500">
-                  Select a department first, then select an active user belonging to that department.
+                  Select the target department, then select the active team member to reserve on their behalf.
                 </p>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
                   <div>
                     <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">
                       Department
@@ -458,7 +466,7 @@ export function ReservationFormModal({
                     <select
                       value={selectedDeptId}
                       onChange={(e) => handleDeptSelect(e.target.value)}
-                      className="w-full h-8 rounded-lg border border-slate-300 bg-white px-2 text-xs text-slate-800"
+                      className="w-full h-9 rounded-xl border border-slate-300 bg-white px-3 text-xs text-slate-800 shadow-2xs focus:outline-none focus:ring-2 focus:ring-blue-600"
                     >
                       {departments.map((d) => (
                         <option key={d.id} value={d.id}>
@@ -472,18 +480,18 @@ export function ReservationFormModal({
                       Target User
                     </label>
                     {isLoadingUsers ? (
-                      <div className="h-8 flex items-center px-2 text-xs text-slate-400">
-                        <Loader2 className="h-3 w-3 animate-spin mr-1.5" /> Loading users...
+                      <div className="h-9 flex items-center px-3 text-xs text-slate-400 bg-white rounded-xl border border-slate-300">
+                        <Loader2 className="h-3.5 w-3.5 animate-spin mr-2 text-blue-600" /> Loading members...
                       </div>
                     ) : deptUsers.length === 0 ? (
-                      <div className="h-8 flex items-center px-2 text-xs text-amber-600 font-medium">
-                        No active users in dept
+                      <div className="h-9 flex items-center px-3 text-xs text-amber-700 bg-amber-50/50 rounded-xl border border-amber-200 font-medium">
+                        No active users in department
                       </div>
                     ) : (
                       <select
                         value={targetUserId}
                         onChange={(e) => setTargetUserId(e.target.value)}
-                        className="w-full h-8 rounded-lg border border-slate-300 bg-white px-2 text-xs text-slate-800"
+                        className="w-full h-9 rounded-xl border border-slate-300 bg-white px-3 text-xs text-slate-800 shadow-2xs focus:outline-none focus:ring-2 focus:ring-blue-600"
                       >
                         {deptUsers.map((u) => (
                           <option key={u.id} value={u.id}>
@@ -497,19 +505,20 @@ export function ReservationFormModal({
               </div>
             )}
 
+            {/* Mode C: Department Only Field */}
             {adminMode === "dept" && (
-              <div className="space-y-2 pt-1 border-t border-slate-200/80">
+              <div className="pt-2 border-t border-slate-200/80 space-y-2">
                 <p className="text-[11px] text-slate-500">
-                  Department-only booking: The resource will be reserved for the entire department as a shared unit. No individual user account will be assigned.
+                  Shared department reservation: The slot is allocated to the entire department without assigning a specific individual user.
                 </p>
-                <div>
+                <div className="sm:w-1/2 pt-1">
                   <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">
                     Department
                   </label>
                   <select
                     value={selectedDeptId}
                     onChange={(e) => handleDeptSelect(e.target.value)}
-                    className="w-full h-8 rounded-lg border border-slate-300 bg-white px-2 text-xs text-slate-800"
+                    className="w-full h-9 rounded-xl border border-slate-300 bg-white px-3 text-xs text-slate-800 shadow-2xs focus:outline-none focus:ring-2 focus:ring-blue-600"
                   >
                     {departments.map((d) => (
                       <option key={d.id} value={d.id}>
@@ -523,137 +532,146 @@ export function ReservationFormModal({
           </div>
         )}
 
-        {/* Resource Selection */}
-        <div className="space-y-1.5">
-          <label className="text-xs font-semibold text-slate-800 flex items-center gap-1.5">
-            <Building2 className="h-3.5 w-3.5 text-blue-600" />
-            Resource
-          </label>
-          <select
-            value={resourceId}
-            onChange={(e) => setResourceId(e.target.value)}
-            disabled={activeResources.length === 0}
-            className="w-full h-10 rounded-xl border border-slate-300 bg-white px-3 text-xs text-slate-800 shadow-2xs focus:outline-none focus:ring-2 focus:ring-blue-600"
-          >
-            {activeResources.map((r) => (
-              <option key={r.id} value={r.id}>
-                {r.name} ({r.category?.name || "General"})
-                {r.capacity ? ` · ${r.capacity} ppl` : ""}
-              </option>
-            ))}
-          </select>
-          {selectedResource?.location && (
+        {/* SECTION C: 2-Column Resource and Booking Purpose */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="space-y-1.5">
+            <label className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+              <Building2 className="h-4 w-4 text-blue-600" />
+              <span>Resource</span>
+            </label>
+            <select
+              value={resourceId}
+              onChange={(e) => setResourceId(e.target.value)}
+              disabled={activeResources.length === 0}
+              className="w-full h-10 rounded-xl border border-slate-300 bg-white px-3 text-xs text-slate-800 shadow-2xs focus:outline-none focus:ring-2 focus:ring-blue-600"
+            >
+              {activeResources.map((r) => (
+                <option key={r.id} value={r.id}>
+                  {r.name} ({r.category?.name || "General"})
+                  {r.capacity ? ` · ${r.capacity} ppl` : ""}
+                </option>
+              ))}
+            </select>
+            {selectedResource?.location && (
+              <p className="text-[11px] text-slate-400 pl-1">
+                Location: {selectedResource.location}
+              </p>
+            )}
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+              <FileText className="h-4 w-4 text-blue-600" />
+              <span>Booking Title / Purpose</span>
+            </label>
+            <Input
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder="e.g. Sprint Planning, Client Demo, Board Meeting"
+              maxLength={120}
+              required
+              className="text-xs h-10 rounded-xl shadow-2xs"
+            />
             <p className="text-[11px] text-slate-400 pl-1">
-              Location: {selectedResource.location}
+              Brief description visible in reservation details
             </p>
-          )}
-        </div>
-
-        {/* Title / Purpose */}
-        <div className="space-y-1.5">
-          <label className="text-xs font-semibold text-slate-800 flex items-center gap-1.5">
-            <FileText className="h-3.5 w-3.5 text-blue-600" />
-            Booking Title / Purpose
-          </label>
-          <Input
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            placeholder="e.g. Sprint Planning, Client Demo, Board Meeting"
-            maxLength={120}
-            required
-            className="text-xs h-10 rounded-xl"
-          />
-        </div>
-
-        {/* Date Selector */}
-        <div className="space-y-1.5">
-          <label className="text-xs font-semibold text-slate-800 flex items-center gap-1.5">
-            <Calendar className="h-3.5 w-3.5 text-blue-600" />
-            Date (Asia/Colombo)
-          </label>
-          <Input
-            type="date"
-            value={date}
-            min={getColomboTodayString()}
-            onChange={(e) => setDate(e.target.value)}
-            required
-            className="text-xs h-10 rounded-xl"
-          />
-        </div>
-
-        {/* Start and End Time Selectors */}
-        <div className="grid grid-cols-2 gap-3">
-          <div className="space-y-1.5">
-            <label className="text-xs font-semibold text-slate-800 flex items-center gap-1.5">
-              <Clock className="h-3.5 w-3.5 text-blue-600" />
-              Start Time
-            </label>
-            <select
-              value={startTime}
-              onChange={(e) => setStartTime(e.target.value)}
-              className="w-full h-10 rounded-xl border border-slate-300 bg-white px-3 text-xs text-slate-800 shadow-2xs focus:outline-none focus:ring-2 focus:ring-blue-600"
-            >
-              {BUSINESS_TIME_SLOTS.slice(0, -1).map((slot) => (
-                <option key={`start-${slot}`} value={slot}>
-                  {formatSlotLabel(slot)}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div className="space-y-1.5">
-            <label className="text-xs font-semibold text-slate-800 flex items-center gap-1.5">
-              <Clock className="h-3.5 w-3.5 text-blue-600" />
-              End Time
-            </label>
-            <select
-              value={endTime}
-              onChange={(e) => setEndTime(e.target.value)}
-              className="w-full h-10 rounded-xl border border-slate-300 bg-white px-3 text-xs text-slate-800 shadow-2xs focus:outline-none focus:ring-2 focus:ring-blue-600"
-            >
-              {BUSINESS_TIME_SLOTS.slice(1).map((slot) => (
-                <option key={`end-${slot}`} value={slot}>
-                  {formatSlotLabel(slot)}
-                </option>
-              ))}
-            </select>
           </div>
         </div>
 
-        {isInvalidTimeOrder && (
-          <p className="text-xs text-rose-600 font-medium">
-            End time must be later than start time.
-          </p>
-        )}
+        {/* SECTION D: 2-Column Date and Time Schedule */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="space-y-1.5">
+            <label className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+              <Calendar className="h-4 w-4 text-blue-600" />
+              <span>Date (Asia/Colombo)</span>
+            </label>
+            <Input
+              type="date"
+              value={date}
+              min={getColomboTodayString()}
+              onChange={(e) => setDate(e.target.value)}
+              required
+              className="text-xs h-10 rounded-xl shadow-2xs"
+            />
+          </div>
 
-        {/* Live Conflict Feedback Bar */}
-        <div className="pt-1">
-          {isCheckingConflict ? (
-            <div className="flex items-center gap-2 text-xs text-slate-400">
-              <Loader2 className="h-3.5 w-3.5 animate-spin text-blue-600" />
-              Checking availability...
+          <div className="space-y-1.5">
+            <label className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+              <Clock className="h-4 w-4 text-blue-600" />
+              <span>Time Slot (09:00 - 18:00)</span>
+            </label>
+            <div className="grid grid-cols-2 gap-2">
+              <select
+                value={startTime}
+                onChange={(e) => setStartTime(e.target.value)}
+                className="w-full h-10 rounded-xl border border-slate-300 bg-white px-2.5 text-xs text-slate-800 shadow-2xs focus:outline-none focus:ring-2 focus:ring-blue-600"
+              >
+                {BUSINESS_TIME_SLOTS.slice(0, -1).map((slot) => (
+                  <option key={`start-${slot}`} value={slot}>
+                    {formatSlotLabel(slot)}
+                  </option>
+                ))}
+              </select>
+
+              <select
+                value={endTime}
+                onChange={(e) => setEndTime(e.target.value)}
+                className="w-full h-10 rounded-xl border border-slate-300 bg-white px-2.5 text-xs text-slate-800 shadow-2xs focus:outline-none focus:ring-2 focus:ring-blue-600"
+              >
+                {BUSINESS_TIME_SLOTS.slice(1).map((slot) => (
+                  <option key={`end-${slot}`} value={slot}>
+                    {formatSlotLabel(slot)}
+                  </option>
+                ))}
+              </select>
             </div>
-          ) : availabilityStatus === "available" ? (
-            <div className="flex items-center gap-1.5 text-xs text-emerald-600 font-medium">
-              <CheckCircle2 className="h-3.5 w-3.5" />
-              Time slot is open and available!
-            </div>
-          ) : availabilityStatus === "conflict" ? (
-            <div className="flex items-center gap-1.5 text-xs text-rose-600 font-medium">
-              <AlertCircle className="h-3.5 w-3.5" />
-              This time slot is already requested or reserved.
-            </div>
-          ) : null}
+            {isInvalidTimeOrder && (
+              <p className="text-[11px] text-rose-600 font-medium pl-1">
+                End time must be after start time.
+              </p>
+            )}
+          </div>
         </div>
 
-        {/* Action Buttons */}
-        <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
+        {/* SECTION E: Availability & Validation Feedback */}
+        <div className="p-3 rounded-xl bg-slate-50 border border-slate-200/80 flex items-center justify-between text-xs">
+          <div className="flex items-center gap-2">
+            {isCheckingConflict ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin text-blue-600" />
+                <span className="text-slate-500 font-medium">Checking live conflict status...</span>
+              </>
+            ) : availabilityStatus === "available" ? (
+              <>
+                <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                <span className="text-emerald-700 font-semibold">
+                  This time slot is open and available to reserve!
+                </span>
+              </>
+            ) : availabilityStatus === "conflict" ? (
+              <>
+                <AlertCircle className="h-4 w-4 text-rose-600" />
+                <span className="text-rose-700 font-semibold">
+                  This time slot is already requested or reserved.
+                </span>
+              </>
+            ) : (
+              <span className="text-slate-400">Verifying timeline interval...</span>
+            )}
+          </div>
+          <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">
+            Live Check
+          </span>
+        </div>
+
+        {/* SECTION F: Confirmation Actions */}
+        <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-slate-100">
           <Button
             type="button"
             variant="outline"
             onClick={onClose}
             disabled={isSubmitting}
-            className="rounded-xl text-xs h-9"
+            className="rounded-xl text-xs h-9 px-4 border-slate-200 text-slate-700 hover:bg-slate-50"
           >
             Cancel
           </Button>
@@ -669,7 +687,7 @@ export function ReservationFormModal({
               (isAdmin && adminMode === "user" && (!targetUserId || !selectedDeptId)) ||
               (isAdmin && adminMode === "dept" && !selectedDeptId)
             }
-            className="rounded-xl text-xs h-9 bg-blue-600 hover:bg-blue-700 text-white font-medium shadow-xs"
+            className="rounded-xl text-xs h-9 px-5 bg-blue-600 hover:bg-blue-700 text-white font-semibold shadow-xs"
           >
             {isSubmitting ? (
               <>
@@ -679,7 +697,7 @@ export function ReservationFormModal({
             ) : isAdmin ? (
               "Confirm & Reserve"
             ) : (
-              "Submit Reservation"
+              "Submit Reservation Request"
             )}
           </Button>
         </div>
