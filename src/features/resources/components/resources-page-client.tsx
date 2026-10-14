@@ -12,6 +12,12 @@ import {
   type ResourceOption,
 } from "@/features/reservations/components/reservation-form-modal";
 import { getGroupedReservationsForDateAction } from "@/features/reservations/actions/reservation-actions";
+import { getEffectiveSchedulingHoursAction } from "@/features/office-shifts/actions/office-shift-actions";
+import type { EffectiveSchedule } from "@/features/office-shifts/types/effective-schedule";
+import {
+  generateBookingEndOptions,
+  minuteToTimeStr,
+} from "@/features/office-shifts/utils/shift-client-utils";
 import {
   getColomboTodayString,
   BUSINESS_TIME_SLOTS,
@@ -48,6 +54,7 @@ export function ResourcesPageClient({
   // State
   const [selectedDate, setSelectedDate] = useState<string>(getColomboTodayString());
   const [occupancy, setOccupancy] = useState<ReservationOccupancy[]>([]);
+  const [effectiveSchedule, setEffectiveSchedule] = useState<EffectiveSchedule | null>(null);
   const [isLoadingOccupancy, setIsLoadingOccupancy] = useState<boolean>(false);
   const [activeView, setActiveView] = useState<"calendar" | "map">("calendar");
 
@@ -63,17 +70,23 @@ export function ResourcesPageClient({
     resourceId: bookResourceIdParam || undefined,
   });
 
-  // Fetch real grouped occupancy for the selected date
+  // Fetch real grouped occupancy and effective office shift schedule for the selected date
   const fetchOccupancy = useCallback((dateStr: string) => {
     setIsLoadingOccupancy(true);
-    getGroupedReservationsForDateAction({ date: dateStr })
-      .then((res) => {
-        if (res.success) {
-          setOccupancy(res.data as ReservationOccupancy[]);
+    Promise.all([
+      getGroupedReservationsForDateAction({ date: dateStr }),
+      getEffectiveSchedulingHoursAction({ date: dateStr }),
+    ])
+      .then(([occRes, shiftRes]) => {
+        if (occRes.success) {
+          setOccupancy(occRes.data as ReservationOccupancy[]);
+        }
+        if (shiftRes.success && shiftRes.data) {
+          setEffectiveSchedule(shiftRes.data as unknown as EffectiveSchedule);
         }
       })
       .catch((err) => {
-        console.error("Failed to fetch occupancy for date:", err);
+        console.error("Failed to fetch occupancy or shifts for date:", err);
       })
       .finally(() => {
         setIsLoadingOccupancy(false);
@@ -83,14 +96,21 @@ export function ResourcesPageClient({
   // Fetch when selectedDate changes
   useEffect(() => {
     let isCurrent = true;
-    getGroupedReservationsForDateAction({ date: selectedDate })
-      .then((res) => {
-        if (isCurrent && res.success) {
-          setOccupancy(res.data as ReservationOccupancy[]);
+    Promise.all([
+      getGroupedReservationsForDateAction({ date: selectedDate }),
+      getEffectiveSchedulingHoursAction({ date: selectedDate }),
+    ])
+      .then(([occRes, shiftRes]) => {
+        if (!isCurrent) return;
+        if (occRes.success) {
+          setOccupancy(occRes.data as ReservationOccupancy[]);
+        }
+        if (shiftRes.success && shiftRes.data) {
+          setEffectiveSchedule(shiftRes.data as unknown as EffectiveSchedule);
         }
       })
       .catch((err) => {
-        console.error("Failed to fetch occupancy for date:", err);
+        console.error("Failed to fetch occupancy or shifts for date:", err);
       });
 
     return () => {
@@ -121,13 +141,27 @@ export function ResourcesPageClient({
 
   // Handle slot click from timeline
   const handleSelectSlot = (resId: string, slotTime: string) => {
-    const sIdx = BUSINESS_TIME_SLOTS.indexOf(slotTime);
-    const endSlot =
-      sIdx !== -1 && sIdx + 2 < BUSINESS_TIME_SLOTS.length
-        ? BUSINESS_TIME_SLOTS[sIdx + 2]
-        : sIdx !== -1 && sIdx + 1 < BUSINESS_TIME_SLOTS.length
-        ? BUSINESS_TIME_SLOTS[sIdx + 1]
-        : "18:00";
+    let endSlot = "18:00";
+    if (effectiveSchedule) {
+      const endOpts = generateBookingEndOptions(
+        slotTime,
+        effectiveSchedule.startMinute,
+        effectiveSchedule.durationMinutes
+      );
+      if (endOpts.length > 1) {
+        endSlot = endOpts[1].timeStr;
+      } else if (endOpts.length > 0) {
+        endSlot = endOpts[0].timeStr;
+      }
+    } else {
+      const sIdx = BUSINESS_TIME_SLOTS.indexOf(slotTime);
+      endSlot =
+        sIdx !== -1 && sIdx + 2 < BUSINESS_TIME_SLOTS.length
+          ? BUSINESS_TIME_SLOTS[sIdx + 2]
+          : sIdx !== -1 && sIdx + 1 < BUSINESS_TIME_SLOTS.length
+          ? BUSINESS_TIME_SLOTS[sIdx + 1]
+          : "18:00";
+    }
 
     setBookingModalState({
       isOpen: true,
@@ -175,6 +209,7 @@ export function ResourcesPageClient({
               resources={resources}
               selectedDate={selectedDate}
               occupancy={occupancy}
+              effectiveSchedule={effectiveSchedule}
               departments={departments}
               isAdmin={user.role === "ADMIN"}
               isLoading={isLoadingOccupancy}
@@ -183,7 +218,9 @@ export function ResourcesPageClient({
                 setBookingModalState({
                   isOpen: true,
                   resourceId: resources[0]?.id,
-                  startTime: "09:00",
+                  startTime: effectiveSchedule
+                    ? minuteToTimeStr(effectiveSchedule.startMinute)
+                    : "09:00",
                   endTime: "10:00",
                 })
               }
@@ -260,6 +297,7 @@ export function ResourcesPageClient({
           }}
           resources={modalResources}
           departments={departments}
+          effectiveSchedule={effectiveSchedule}
           isAdmin={user.role === "ADMIN"}
           initialResourceId={bookingModalState.resourceId}
           initialDate={selectedDate}

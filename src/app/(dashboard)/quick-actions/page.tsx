@@ -35,12 +35,12 @@ export default async function QuickActionsPage() {
   const unreadCount = unreadRes.success ? unreadRes.data : 0;
 
   return (
-    <>
+    <div className="flex-1 flex flex-col min-w-0">
       <AppHeader
         title="Quick Actions"
         description="Streamlined shortcuts to your daily reservation workflows and management tasks."
       />
-      <main className="w-full max-w-5xl mx-auto p-6 space-y-8">
+      <main className="flex-1 px-8 pb-12 max-w-7xl w-full space-y-6">
         {/* Welcome Banner */}
         <div className="p-6 rounded-2xl bg-gradient-to-r from-blue-900 via-indigo-900 to-slate-900 text-white shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div className="space-y-1.5 max-w-xl">
@@ -296,7 +296,7 @@ export default async function QuickActionsPage() {
           </div>
         )}
       </main>
-    </>
+    </div>
   );
 }
 

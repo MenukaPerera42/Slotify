@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useTransition } from "react";
+import { useState, useEffect, useTransition, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import {
   Calendar,
@@ -24,10 +24,16 @@ import {
   listActiveUsersAction,
 } from "../actions/reservation-actions";
 import { getMyDepartmentAction } from "@/features/departments/actions/department-actions";
+import { getEffectiveSchedulingHoursAction } from "@/features/office-shifts/actions/office-shift-actions";
+import type { EffectiveSchedule } from "@/features/office-shifts/types/effective-schedule";
 import {
-  BUSINESS_TIME_SLOTS,
-  formatSlotLabel,
+  generateBookingStartOptions,
+  generateBookingEndOptions,
+  formatShiftHours,
+} from "@/features/office-shifts/utils/shift-client-utils";
+import {
   getColomboTodayString,
+  shiftColomboDate,
   createColomboISO,
 } from "../utils/client-date";
 
@@ -60,6 +66,7 @@ interface ReservationFormModalProps {
   onSuccess?: () => void;
   resources: ResourceOption[];
   departments?: DepartmentOption[];
+  effectiveSchedule?: EffectiveSchedule | null;
   isAdmin?: boolean;
   initialResourceId?: string;
   initialDate?: string;
@@ -73,6 +80,7 @@ export function ReservationFormModal({
   onSuccess,
   resources,
   departments = [],
+  effectiveSchedule,
   isAdmin = false,
   initialResourceId,
   initialDate,
@@ -108,8 +116,85 @@ export function ReservationFormModal({
   );
   const [title, setTitle] = useState("");
   const [date, setDate] = useState(initialDate || getColomboTodayString());
-  const [startTime, setStartTime] = useState(initialStartTime);
-  const [endTime, setEndTime] = useState(initialEndTime);
+
+  // Dynamic schedule state
+  const [fetchedSchedule, setFetchedSchedule] = useState<EffectiveSchedule | null>(null);
+  const schedule = effectiveSchedule ?? fetchedSchedule;
+
+  useEffect(() => {
+    if (!isOpen) return;
+    let isCurrent = true;
+    getEffectiveSchedulingHoursAction({
+      date,
+      resourceId: resourceId || undefined,
+    })
+      .then((res) => {
+        if (isCurrent && res.success && res.data) {
+          setFetchedSchedule(res.data as unknown as EffectiveSchedule);
+        }
+      })
+      .catch((err) => {
+        console.error("Failed to load effective schedule in modal:", err);
+      });
+
+    return () => {
+      isCurrent = false;
+    };
+  }, [isOpen, date, resourceId]);
+
+  const startMinute = schedule?.startMinute ?? 540;
+  const durationMinutes = schedule?.durationMinutes ?? 540;
+
+  const startOptions = useMemo(() => {
+    return generateBookingStartOptions(startMinute, durationMinutes);
+  }, [startMinute, durationMinutes]);
+
+  const [userStartTime, setUserStartTime] = useState<string | null>(null);
+  const [userEndTime, setUserEndTime] = useState<string | null>(null);
+
+  // Derived effective start time: user selection or initialStartTime or first available
+  const startTime = useMemo(() => {
+    if (userStartTime && startOptions.some((o) => o.timeStr === userStartTime)) {
+      return userStartTime;
+    }
+    if (initialStartTime && startOptions.some((o) => o.timeStr === initialStartTime)) {
+      return initialStartTime;
+    }
+    return startOptions[0]?.timeStr ?? "09:00";
+  }, [userStartTime, startOptions, initialStartTime]);
+
+  const endOptions = useMemo(() => {
+    if (!startTime) return [];
+    return generateBookingEndOptions(startTime, startMinute, durationMinutes);
+  }, [startTime, startMinute, durationMinutes]);
+
+  // Derived effective end time: user selection or initialEndTime or standard 1h/30m
+  const endTime = useMemo(() => {
+    if (userEndTime && endOptions.some((o) => o.timeStr === userEndTime)) {
+      return userEndTime;
+    }
+    if (initialEndTime && endOptions.some((o) => o.timeStr === initialEndTime)) {
+      return initialEndTime;
+    }
+    return endOptions.length > 1 ? endOptions[1].timeStr : (endOptions[0]?.timeStr ?? "10:00");
+  }, [userEndTime, endOptions, initialEndTime]);
+
+  // Derive ISO strings and timezone offsets
+  const selectedStartOpt = startOptions.find((o) => o.timeStr === startTime);
+  const startDayOffset = selectedStartOpt?.dayOffset ?? 0;
+  const startDateStr = date ? shiftColomboDate(date, startDayOffset) : "";
+  const startISO = date && startTime ? createColomboISO(startDateStr, startTime) : "";
+
+  const selectedEndOpt = endOptions.find((o) => o.timeStr === endTime);
+  const endDayOffset = selectedEndOpt?.dayOffset ?? 0;
+  const endDateStr = date ? shiftColomboDate(date, endDayOffset) : "";
+  const endISO = date && endTime ? createColomboISO(endDateStr, endTime) : "";
+
+  const isInvalidTimeOrder = Boolean(
+    !startTime ||
+      !endTime ||
+      (startISO && endISO && new Date(endISO).getTime() <= new Date(startISO).getTime())
+  );
 
   // Live availability feedback state
   const [isCheckingConflict, setIsCheckingConflict] = useState(false);
@@ -182,10 +267,6 @@ export function ReservationFormModal({
     };
   }, [isOpen]);
 
-  // Derived validation
-  const isInvalidTimeOrder = Boolean(startTime && endTime && startTime >= endTime);
-  const endISO = date && endTime ? createColomboISO(date, endTime) : "";
-
   // Live conflict checker (debounce 250ms)
   useEffect(() => {
     if (!isOpen || !resourceId || !date || !startTime || !endTime || isInvalidTimeOrder) {
@@ -198,7 +279,6 @@ export function ReservationFormModal({
     }
 
     let isCurrent = true;
-    const startISO = createColomboISO(date, startTime);
 
     const timer = setTimeout(() => {
       setIsCheckingConflict(true);
@@ -229,7 +309,7 @@ export function ReservationFormModal({
       isCurrent = false;
       clearTimeout(timer);
     };
-  }, [isOpen, resourceId, date, startTime, endTime, isInvalidTimeOrder, endISO]);
+  }, [isOpen, resourceId, date, startTime, endTime, isInvalidTimeOrder, startISO, endISO]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -313,7 +393,9 @@ export function ReservationFormModal({
       }
 
       if (!result.success) {
-        if (result.code === "SLOT_CONFLICT") {
+        if (result.code === "SHIFT_OUTSIDE_WINDOW") {
+          setErrorMessage("This time slot falls outside the active office shift hours. Please choose a time within permitted operating hours.");
+        } else if (result.code === "SLOT_CONFLICT") {
           setErrorMessage("This time slot is already requested or reserved. Refresh availability and choose another time.");
         } else if (result.code === "DEPARTMENT_REQUIRED") {
           setErrorMessage("An active department assignment is required to make a reservation.");
@@ -344,7 +426,7 @@ export function ReservationFormModal({
       isOpen={isOpen}
       onClose={onClose}
       title="Request Reservation"
-      description="Specify reservation parameters in Asia/Colombo business time (09:00 - 18:00)."
+      description={`Specify reservation parameters in Asia/Colombo (${formatShiftHours(startMinute, durationMinutes)}).`}
       className="max-w-2xl sm:max-w-[720px] w-full p-6 sm:p-7"
     >
       <form onSubmit={handleSubmit} className="space-y-5">
@@ -354,6 +436,23 @@ export function ReservationFormModal({
             <div className="flex-1 font-medium">{errorMessage}</div>
           </div>
         )}
+
+        {/* Active Shift Policy Banner */}
+        <div className="p-3 rounded-xl bg-blue-50/70 border border-blue-200/80 text-xs flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Clock className="h-4 w-4 text-blue-600 shrink-0" />
+            <span className="font-semibold text-blue-900">Active Policy:</span>
+            <span className="text-blue-800 font-medium">
+              {schedule?.policy?.name || "Standard Business Hours"} (
+              {formatShiftHours(startMinute, durationMinutes)})
+            </span>
+          </div>
+          {schedule?.enforced && (
+            <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 border border-blue-300 shrink-0">
+              Enforced
+            </span>
+          )}
+        </div>
 
         {/* Member Department Warning Banner */}
         {!isAdmin && isAssignmentRequired && (
@@ -598,29 +697,29 @@ export function ReservationFormModal({
           <div className="space-y-1.5">
             <label className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
               <Clock className="h-4 w-4 text-blue-600" />
-              <span>Time Slot (09:00 - 18:00)</span>
+              <span>Time Slot ({formatShiftHours(startMinute, durationMinutes)})</span>
             </label>
             <div className="grid grid-cols-2 gap-2">
               <select
                 value={startTime}
-                onChange={(e) => setStartTime(e.target.value)}
+                onChange={(e) => setUserStartTime(e.target.value)}
                 className="w-full h-10 rounded-xl border border-slate-300 bg-white px-2.5 text-xs text-slate-800 shadow-2xs focus:outline-none focus:ring-2 focus:ring-blue-600"
               >
-                {BUSINESS_TIME_SLOTS.slice(0, -1).map((slot) => (
-                  <option key={`start-${slot}`} value={slot}>
-                    {formatSlotLabel(slot)}
+                {startOptions.map((opt) => (
+                  <option key={`start-${opt.timeStr}-${opt.dayOffset}`} value={opt.timeStr}>
+                    {opt.label}
                   </option>
                 ))}
               </select>
 
               <select
                 value={endTime}
-                onChange={(e) => setEndTime(e.target.value)}
+                onChange={(e) => setUserEndTime(e.target.value)}
                 className="w-full h-10 rounded-xl border border-slate-300 bg-white px-2.5 text-xs text-slate-800 shadow-2xs focus:outline-none focus:ring-2 focus:ring-blue-600"
               >
-                {BUSINESS_TIME_SLOTS.slice(1).map((slot) => (
-                  <option key={`end-${slot}`} value={slot}>
-                    {formatSlotLabel(slot)}
+                {endOptions.map((opt) => (
+                  <option key={`end-${opt.timeStr}-${opt.dayOffset}`} value={opt.timeStr}>
+                    {opt.label}
                   </option>
                 ))}
               </select>

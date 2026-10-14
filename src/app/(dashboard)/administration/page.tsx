@@ -40,19 +40,12 @@ export default async function AdministrationPage() {
   ]);
 
   return (
-    <>
+    <div className="flex-1 flex flex-col min-w-0">
       <AppHeader
         title="Administration"
-        description="Manage organizational users, department assignments, and access roles."
+        description="Manage organizational users, department assignments, access roles, and scheduling policies."
       />
-      <main className="w-full max-w-5xl mx-auto p-6 space-y-6">
-        <div>
-          <h2 className="text-lg font-bold text-slate-900">User & Department Governance</h2>
-          <p className="text-xs text-slate-500 mt-0.5">
-            Manage organizational team members, department allocations, and access privileges.
-          </p>
-        </div>
-
+      <main className="flex-1 px-8 pb-12 max-w-7xl w-full space-y-6">
         <AdminUserManager
           users={users}
           departments={departments}
@@ -60,6 +53,6 @@ export default async function AdministrationPage() {
           initialUnassignedCount={unassignedCount}
         />
       </main>
-    </>
+    </div>
   );
 }

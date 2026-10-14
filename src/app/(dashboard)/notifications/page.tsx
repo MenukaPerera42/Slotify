@@ -20,18 +20,18 @@ export default async function NotificationsPage() {
   const unreadCount = countRes.success ? countRes.data : 0;
 
   return (
-    <>
+    <div className="flex-1 flex flex-col min-w-0">
       <AppHeader
         title="Notifications"
         description="Stay up to date with activity, approvals, and reminders across your reservations."
       />
-      <main className="w-full max-w-4xl mx-auto p-6 space-y-6">
+      <main className="flex-1 px-8 pb-12 max-w-7xl w-full space-y-6">
         <NotificationsView
           initialNotifications={notifications}
           initialUnreadCount={unreadCount}
         />
       </main>
-    </>
+    </div>
   );
 }
 

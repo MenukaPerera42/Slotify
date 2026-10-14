@@ -35,6 +35,7 @@ import {
   correctReservationDepartmentAction,
 } from "@/features/reservations/actions/reservation-actions";
 import { formatColomboInterval, formatColomboDate } from "@/features/reservations/utils/client-date";
+import { AdminOfficeShifts } from "@/features/office-shifts/components/admin-office-shifts";
 
 export interface AdminUserRecord {
   id: string;
@@ -77,7 +78,7 @@ export function AdminUserManager({
   const toast = useToast();
 
   // Navigation tab
-  const [activeTab, setActiveTab] = useState<"users" | "unassigned">("users");
+  const [activeTab, setActiveTab] = useState<"users" | "unassigned" | "shifts">("users");
 
   // User filters & search
   const [search, setSearch] = useState("");
@@ -446,6 +447,20 @@ export function AdminUserManager({
                 {unassignedCount}
               </span>
             )}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab("shifts")}
+            className={cn(
+              "px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-2",
+              activeTab === "shifts"
+                ? "bg-blue-600 text-white shadow-xs"
+                : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+            )}
+          >
+            <Clock className="h-3.5 w-3.5" />
+            Scheduling &amp; Office Hours
           </button>
         </div>
 
@@ -830,6 +845,9 @@ export function AdminUserManager({
           </div>
         </div>
       )}
+
+      {/* TAB 3: OFFICE HOURS & SHIFTS */}
+      {activeTab === "shifts" && <AdminOfficeShifts />}
 
       {/* MODAL 1: ADD MEMBER */}
       <Modal
