@@ -39,3 +39,4 @@ export interface EffectiveSchedule {
   occupancy: EffectiveScheduleOccupancy[];
   outsideWindowOccupancy: EffectiveScheduleOccupancy[];
 }
+
