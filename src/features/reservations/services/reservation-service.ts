@@ -8,6 +8,8 @@ import { ReservationError } from "../types";
 import { activeUserListSchema, reservationListSchema, type AvailabilityInput, type CreateAdminReservationInput, type CreateReservationInput, type DailyInput } from "../schemas/reservation-schema";
 import { createNotificationsTx } from "@/features/notifications/services/notification-service";
 import { groupAdjacentReservations } from "../utils/group-adjacent";
+import { activeShift, lockSchedulingPolicy } from "@/features/office-shifts/services/office-shift-service";
+import { bookingOperationalDate } from "@/features/office-shifts/utils/office-window";
 
 const blocking: ReservationStatus[] = ["PENDING", "APPROVED"];
 const reservationSelect = {
@@ -45,6 +47,12 @@ async function insertReservation(
   const endTime = new Date(input.endTime);
   if (endTime <= new Date()) throw new ReservationError("INVALID_INPUT", "The reservation must not be entirely in the past.");
   return prisma.$transaction(async (tx) => {
+    // Serialize booking validation with policy activation.
+    await lockSchedulingPolicy(tx);
+    const shift = await activeShift(tx);
+    if (shift && !bookingOperationalDate(startTime, endTime, shift)) {
+      throw new ReservationError("SHIFT_OUTSIDE_WINDOW", "The booking must fit entirely within an active office shift.");
+    }
     // Lock the resource row against a simultaneous deactivate operation.
     const rows = await tx.$queryRaw<Array<{ id: string; name: string; isActive: boolean }>>`
       SELECT id, name, "isActive" FROM resources WHERE id = ${input.resourceId}::uuid FOR SHARE`;

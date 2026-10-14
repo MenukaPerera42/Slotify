@@ -16,6 +16,7 @@
     "test:stage6b1": "node --env-file=.env --import tsx tests/stage6b1-refinements.mjs",
     "test:dashboard": "node --env-file=.env --import tsx tests/dashboard-stage6c.mjs",
     "test:admin-management": "node --env-file=.env tests/admin-management-stage7a.mjs",
+    "test:office-shifts": "node --env-file=.env tests/office-shifts-stage7c1.mjs",
     "format": "prettier --write .",
     "db:seed": "node --env-file=.env --import tsx prisma/seed.ts",
     "db:seed-departments": "node --env-file=.env --import tsx prisma/seed-departments.ts",

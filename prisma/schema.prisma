@@ -26,6 +26,14 @@ enum NotificationType {
   RESERVATION_CANCELLED
 }
 
+enum OfficeShiftMode {
+  MORNING
+  EVENING
+  NIGHT
+  FULL_DAY
+  CUSTOM
+}
+
 model User {
   id           String        @id @default(uuid()) @db.Uuid
   name         String
@@ -43,10 +51,28 @@ model User {
   receivedNotifications Notification[] @relation("NotificationRecipient")
   actedNotifications    Notification[] @relation("NotificationActor")
   departmentCorrections ReservationDepartmentCorrection[] @relation("DepartmentCorrectionActor")
+  updatedOfficeShifts OfficeShift[] @relation("OfficeShiftUpdater")
   department            Department? @relation(fields: [departmentId], references: [id], onDelete: Restrict)
 
   @@index([departmentId])
   @@map("users")
+}
+
+model OfficeShift {
+  id              String          @id @default(uuid()) @db.Uuid
+  name            String          @unique
+  mode            OfficeShiftMode
+  description     String?
+  startMinute     Int
+  durationMinutes Int
+  isActive        Boolean         @default(false)
+  updatedByUserId String?         @db.Uuid
+  createdAt       DateTime        @default(now()) @db.Timestamptz(3)
+  updatedAt       DateTime        @updatedAt @db.Timestamptz(3)
+  updatedBy       User?           @relation("OfficeShiftUpdater", fields: [updatedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([isActive])
+  @@map("office_shifts")
 }
 
 model Department {
