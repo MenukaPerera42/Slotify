@@ -35,6 +35,9 @@ export default async function ResourcesPage({
         <h1 className="text-2xl font-bold tracking-tight text-slate-900">
           Resource Management
         </h1>
+        <p className="text-xs text-slate-500 mt-1">
+          Discover, manage, and reserve shared workspaces, meeting rooms, and equipment.
+        </p>
       </header>
 
       <main className="flex-1 px-8 pb-12 max-w-7xl w-full">

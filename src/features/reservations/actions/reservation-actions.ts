@@ -84,7 +84,14 @@ export async function updateReservationTimeAction(input: unknown) {
   return run(async () => {
     // Authorize before validating untrusted input, following admin correction actions.
     await requireAdminForCorrection();
-    const result = await updateReservationTime(updateReservationTimeSchema.parse(input));
+    const parsed = updateReservationTimeSchema.safeParse(input);
+    if (!parsed.success) {
+      if (parsed.error.issues.some((issue) => issue.message === "End time must be after start time")) {
+        throw new ReservationError("INVALID_TIME_RANGE", "End time must be after start time.");
+      }
+      throw parsed.error;
+    }
+    const result = await updateReservationTime(parsed.data);
     refresh();
     revalidatePath(`/resources/${result.reservation.resourceId}`);
     return result;

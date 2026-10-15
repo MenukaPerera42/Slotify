@@ -14,6 +14,7 @@ export interface EffectiveScheduleOccupancy {
   departmentId?: string | null;
   startTime: Date | string;
   endTime: Date | string;
+  updatedAt?: Date | string;
   status: "PENDING" | "APPROVED" | "REJECTED" | "CANCELLED";
   title?: string;
   userId?: string | null;

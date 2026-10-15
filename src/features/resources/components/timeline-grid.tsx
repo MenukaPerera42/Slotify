@@ -23,6 +23,7 @@ import { useRouter } from "next/navigation";
 import { useToast } from "@/components/ui/toast";
 import {
   correctReservationDepartmentAction,
+  getReservationAction,
   updateReservationTimeAction,
 } from "@/features/reservations/actions/reservation-actions";
 import { cn } from "@/lib/utils";
@@ -50,6 +51,7 @@ export interface ReservationOccupancy {
   departmentId?: string | null;
   startTime: Date | string;
   endTime: Date | string;
+  updatedAt?: Date | string;
   status: "PENDING" | "APPROVED" | "REJECTED" | "CANCELLED";
   title?: string;
   reservationIds?: string[];
@@ -160,6 +162,7 @@ export function TimelineGrid({
     expectedUpdatedAt: string;
     isSubmitting: boolean;
     error: string | null;
+    isStale: boolean;
   } | null>(null);
 
   // Accessible fallback modal for keyboard/touch/individual grouped booking editing
@@ -174,6 +177,7 @@ export function TimelineGrid({
     expectedUpdatedAt: string;
     isSubmitting: boolean;
     error: string | null;
+    isStale: boolean;
   } | null>(null);
 
   // Department correction form state inside inspection modal
@@ -291,6 +295,14 @@ export function TimelineGrid({
     };
   };
 
+  const bookingRevision = (booking: ReservationOccupancy, reservationId: string) => {
+    const detail = booking.bookings?.find((item) => item.id === reservationId);
+    const value = detail?.updatedAt ?? (booking.id === reservationId ? booking.updatedAt : null);
+    if (!value) return null;
+    const parsed = new Date(value);
+    return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
+  };
+
   // Initiate pointer drag on left or right handle
   const handleStartDrag = (
     e: React.PointerEvent,
@@ -306,12 +318,12 @@ export function TimelineGrid({
     e.preventDefault();
 
     const reservationId = booking.reservationIds?.[0] || booking.id || "";
-    const bookingDetails = booking.bookings?.[0];
-    const expectedUpdatedAt = bookingDetails?.updatedAt
-      ? new Date(bookingDetails.updatedAt).toISOString()
-      : (booking as { updatedAt?: Date | string }).updatedAt
-      ? new Date((booking as { updatedAt?: Date | string }).updatedAt!).toISOString()
-      : new Date().toISOString();
+    const expectedUpdatedAt = bookingRevision(booking, reservationId);
+    if (!reservationId || !expectedUpdatedAt) {
+      toast.error("Booking details are incomplete. Refresh the schedule before resizing.");
+      onRefresh?.();
+      return;
+    }
 
     const initialStartMs = new Date(booking.startTime).getTime();
     const initialEndMs = new Date(booking.endTime).getTime();
@@ -346,7 +358,7 @@ export function TimelineGrid({
       const containerWidth = container?.getBoundingClientRect().width || 1000;
       const deltaX = e.clientX - dragState.startX;
       const deltaMs = (deltaX / containerWidth) * totalTimelineMs;
-      const stepMs = 30 * 60 * 1000;
+      const stepMs = (effectiveSchedule?.timelineIntervalMinutes ?? 30) * 60 * 1000;
 
       let hasMoved = dragState.hasMoved;
       if (Math.abs(deltaX) > 4) {
@@ -394,6 +406,7 @@ export function TimelineGrid({
           expectedUpdatedAt,
           isSubmitting: false,
           error: null,
+          isStale: false,
         });
       }
     };
@@ -409,11 +422,11 @@ export function TimelineGrid({
       window.removeEventListener("mousemove", onPointerMove);
       window.removeEventListener("mouseup", onPointerUp);
     };
-  }, [dragState, timelineStartUtc, timelineEndUtc, totalTimelineMs]);
+  }, [dragState, timelineStartUtc, timelineEndUtc, totalTimelineMs, effectiveSchedule?.timelineIntervalMinutes]);
 
   // Commit proposed drag time change to database
   const handleConfirmTimeChange = async () => {
-    if (!confirmModalState) return;
+    if (!confirmModalState || confirmModalState.isStale) return;
 
     setConfirmModalState((prev) => (prev ? { ...prev, isSubmitting: true, error: null } : null));
 
@@ -433,23 +446,32 @@ export function TimelineGrid({
       } else {
         let errorMsg = res.error || "Failed to update reservation time.";
         if (res.code === "SLOT_CONFLICT") {
-          errorMsg = "SLOT_CONFLICT: The proposed time interval overlaps another reservation for this resource.";
+          errorMsg = "That time is occupied by another booking. Choose a different interval.";
         } else if (res.code === "OUTSIDE_SHIFT_HOURS") {
-          errorMsg = `OUTSIDE_SHIFT_HOURS: The proposed time is outside the allowed office shift (${shiftHoursLabel}).`;
+          errorMsg = `Choose a time within the office shift (${shiftHoursLabel}).`;
         } else if (res.code === "STALE_UPDATE") {
-          errorMsg = "STALE_UPDATE: This reservation was modified by another user. Refreshing schedule...";
-          setTimeout(() => {
-            onRefresh?.();
-            router.refresh();
-          }, 1500);
+          errorMsg = "This booking changed. Reload its latest time before resizing again.";
+        } else if (res.code === "INVALID_TIME_RANGE") {
+          errorMsg = "End time must be after start time.";
         }
-        setConfirmModalState((prev) => (prev ? { ...prev, isSubmitting: false, error: errorMsg } : null));
-        toast.error(errorMsg);
+        setConfirmModalState((prev) => (prev ? { ...prev, isSubmitting: false, error: errorMsg, isStale: res.code === "STALE_UPDATE" } : null));
       }
     } catch {
       setConfirmModalState((prev) => (prev ? { ...prev, isSubmitting: false, error: "Network error while saving." } : null));
-      toast.error("Failed to update reservation time.");
     }
+  };
+
+  const reloadLatestBooking = async (reservationId: string) => {
+    const result = await getReservationAction(reservationId);
+    if (!result.success) {
+      toast.error(result.error || "Unable to reload this booking.");
+      return;
+    }
+    setConfirmModalState(null);
+    setAccessibleEditModalState(null);
+    setInspectBooking(null);
+    onRefresh?.();
+    router.refresh();
   };
 
   // Open accessible edit times modal for a single booking
@@ -458,12 +480,12 @@ export function TimelineGrid({
     resource: TimelineResourceItem
   ) => {
     const reservationId = booking.reservationIds?.[0] || booking.id || "";
-    const bookingDetails = booking.bookings?.[0];
-    const expectedUpdatedAt = bookingDetails?.updatedAt
-      ? new Date(bookingDetails.updatedAt).toISOString()
-      : (booking as { updatedAt?: Date | string }).updatedAt
-      ? new Date((booking as { updatedAt?: Date | string }).updatedAt!).toISOString()
-      : new Date().toISOString();
+    const expectedUpdatedAt = bookingRevision(booking, reservationId);
+    if (!reservationId || !expectedUpdatedAt) {
+      toast.error("Booking details are incomplete. Refresh the schedule before editing.");
+      onRefresh?.();
+      return;
+    }
 
     setAccessibleEditModalState({
       isOpen: true,
@@ -476,6 +498,7 @@ export function TimelineGrid({
       expectedUpdatedAt,
       isSubmitting: false,
       error: null,
+      isStale: false,
     });
   };
 
@@ -486,9 +509,12 @@ export function TimelineGrid({
   ) => {
     const startIso = b.startTime || inspectBooking?.booking.startTime || new Date();
     const endIso = b.endTime || inspectBooking?.booking.endTime || new Date();
-    const expectedUpdatedAt = b.updatedAt
-      ? new Date(b.updatedAt).toISOString()
-      : new Date().toISOString();
+    const expectedUpdatedAt = b.updatedAt ? new Date(b.updatedAt).toISOString() : null;
+    if (!expectedUpdatedAt) {
+      toast.error("Booking details are incomplete. Refresh the schedule before editing.");
+      onRefresh?.();
+      return;
+    }
 
     setAccessibleEditModalState({
       isOpen: true,
@@ -501,12 +527,13 @@ export function TimelineGrid({
       expectedUpdatedAt,
       isSubmitting: false,
       error: null,
+      isStale: false,
     });
   };
 
   // Save accessible edit modal time changes
   const handleSaveAccessibleEdit = async () => {
-    if (!accessibleEditModalState) return;
+    if (!accessibleEditModalState || accessibleEditModalState.isStale) return;
 
     const startIso = createColomboISO(accessibleEditModalState.dateStr, accessibleEditModalState.startTimeStr);
     const endIso = createColomboISO(accessibleEditModalState.dateStr, accessibleEditModalState.endTimeStr);
@@ -535,22 +562,18 @@ export function TimelineGrid({
       } else {
         let errorMsg = res.error || "Failed to update reservation time.";
         if (res.code === "SLOT_CONFLICT") {
-          errorMsg = "SLOT_CONFLICT: The new interval overlaps another reservation for this resource.";
+          errorMsg = "That time is occupied by another booking. Choose a different interval.";
         } else if (res.code === "OUTSIDE_SHIFT_HOURS") {
-          errorMsg = `OUTSIDE_SHIFT_HOURS: The new interval must fit within the active office shift (${shiftHoursLabel}).`;
+          errorMsg = `Choose a time within the office shift (${shiftHoursLabel}).`;
         } else if (res.code === "STALE_UPDATE") {
-          errorMsg = "STALE_UPDATE: This reservation was modified by another user. Refreshing schedule...";
-          setTimeout(() => {
-            onRefresh?.();
-            router.refresh();
-          }, 1500);
+          errorMsg = "This booking changed. Reload its latest time before editing again.";
+        } else if (res.code === "INVALID_TIME_RANGE") {
+          errorMsg = "End time must be after start time.";
         }
-        setAccessibleEditModalState((prev) => (prev ? { ...prev, isSubmitting: false, error: errorMsg } : null));
-        toast.error(errorMsg);
+        setAccessibleEditModalState((prev) => (prev ? { ...prev, isSubmitting: false, error: errorMsg, isStale: res.code === "STALE_UPDATE" } : null));
       }
     } catch {
       setAccessibleEditModalState((prev) => (prev ? { ...prev, isSubmitting: false, error: "Network error while saving." } : null));
-      toast.error("Failed to update reservation time.");
     }
   };
 
@@ -949,7 +972,7 @@ export function TimelineGrid({
                             return (
                               <div
                                 key={bookingKey}
-                                className="absolute top-1.5 bottom-1.5 pointer-events-auto"
+                                className="group/block absolute top-1.5 bottom-1.5 pointer-events-auto"
                                 style={{
                                   left: `${pos.left}%`,
                                   width: `${pos.width}%`,
@@ -978,7 +1001,7 @@ export function TimelineGrid({
                                     });
                                   }}
                                   className={cn(
-                                    "absolute inset-0 rounded-lg border shadow-2xs transition-all select-none overflow-hidden flex items-center px-1.5 py-0.5 z-10 cursor-pointer text-left hover:brightness-95 focus:outline-none focus:ring-2 focus:ring-blue-500 group/block",
+                                    "absolute inset-0 rounded-lg border shadow-2xs transition-all select-none overflow-visible flex items-center px-1.5 py-0.5 z-10 cursor-pointer text-left hover:brightness-95 focus:outline-none focus:ring-2 focus:ring-blue-500",
                                     isPending && "border-amber-400 border-dashed",
                                     isDraggingThis &&
                                       "ring-2 ring-blue-500 z-30 opacity-95 shadow-md"
@@ -992,33 +1015,6 @@ export function TimelineGrid({
                                   }}
                                   title={tooltipText}
                                 >
-                                  {/* Left Resize Handle (Start Time) - Admin & Single Only */}
-                                  {isAdmin && !isGrouped && (
-                                    <div
-                                      role="slider"
-                                      tabIndex={0}
-                                      aria-label="Resize start time"
-                                      aria-valuenow={new Date(booking.startTime).getTime()}
-                                      aria-valuemin={timelineStartUtc}
-                                      aria-valuemax={new Date(booking.endTime).getTime() - 30 * 60 * 1000}
-                                      aria-valuetext={formatColomboTime(booking.startTime)}
-                                      title="Drag to resize start time (or press Enter to edit times)"
-                                      onPointerDown={(e) =>
-                                        handleStartDrag(e, booking, res, "start")
-                                      }
-                                      onKeyDown={(e) => {
-                                        if (e.key === "Enter" || e.key === " ") {
-                                          e.stopPropagation();
-                                          e.preventDefault();
-                                          openAccessibleEditModal(booking, res);
-                                        }
-                                      }}
-                                      className="absolute left-0 top-0 bottom-0 w-3 hover:w-3.5 z-20 cursor-ew-resize flex items-center justify-center opacity-0 group-hover/block:opacity-100 focus:opacity-100 bg-black/10 hover:bg-black/20 transition-all select-none rounded-l-lg"
-                                    >
-                                      <div className="h-4 w-1 rounded-full bg-white shadow-xs" />
-                                    </div>
-                                  )}
-
                                   <div className="flex items-center justify-between gap-1 w-full min-w-0 px-1">
                                     {/* Left: Status Indicator + Department Badge + Title */}
                                     <div className="flex items-center gap-1.5 min-w-0 truncate">
@@ -1070,33 +1066,53 @@ export function TimelineGrid({
                                     </div>
                                   </div>
 
-                                  {/* Right Resize Handle (End Time) - Admin & Single Only */}
-                                  {isAdmin && !isGrouped && (
+                                </button>
+                                {isAdmin && !isGrouped && bookingRevision(booking, booking.reservationIds?.[0] || booking.id || "") && (
+                                  <>
                                     <div
                                       role="slider"
                                       tabIndex={0}
-                                      aria-label="Resize end time"
-                                      aria-valuenow={new Date(booking.endTime).getTime()}
-                                      aria-valuemin={new Date(booking.startTime).getTime() + 30 * 60 * 1000}
-                                      aria-valuemax={timelineEndUtc}
-                                      aria-valuetext={formatColomboTime(booking.endTime)}
-                                      title="Drag to resize end time (or press Enter to edit times)"
-                                      onPointerDown={(e) =>
-                                        handleStartDrag(e, booking, res, "end")
-                                      }
+                                      aria-label="Adjust start time"
+                                      aria-valuenow={new Date(booking.startTime).getTime()}
+                                      aria-valuemin={timelineStartUtc}
+                                      aria-valuemax={new Date(booking.endTime).getTime() - (effectiveSchedule?.timelineIntervalMinutes ?? 30) * 60 * 1000}
+                                      aria-valuetext={formatColomboTime(booking.startTime)}
+                                      title="Adjust start time"
+                                      onPointerDown={(e) => handleStartDrag(e, booking, res, "start")}
                                       onKeyDown={(e) => {
                                         if (e.key === "Enter" || e.key === " ") {
-                                          e.stopPropagation();
                                           e.preventDefault();
                                           openAccessibleEditModal(booking, res);
                                         }
                                       }}
-                                      className="absolute right-0 top-0 bottom-0 w-3 hover:w-3.5 z-20 cursor-ew-resize flex items-center justify-center opacity-0 group-hover/block:opacity-100 focus:opacity-100 bg-black/10 hover:bg-black/20 transition-all select-none rounded-r-lg"
+                                      className="group/start absolute left-0 top-0 bottom-0 w-4 z-20 cursor-col-resize flex items-center justify-center opacity-0 group-hover/block:opacity-70 hover:!opacity-100 focus-visible:opacity-100 bg-blue-500/10 hover:bg-blue-500/25 focus-visible:bg-blue-500/25 border-l-2 border-blue-500/40 hover:border-blue-600 focus-visible:border-blue-600 transition-opacity duration-150 select-none rounded-l-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
                                     >
-                                      <div className="h-4 w-1 rounded-full bg-white shadow-xs" />
+                                      <div className="h-4 w-0.5 rounded-full bg-blue-600 shadow-xs" />
+                                      <span role="tooltip" className="pointer-events-none absolute bottom-full left-0 mb-1 whitespace-nowrap rounded bg-slate-900 px-2 py-1 text-[10px] font-medium text-white shadow-sm opacity-0 group-hover/start:opacity-100 group-focus-within/start:opacity-100 transition-opacity">Adjust start time</span>
                                     </div>
-                                  )}
-                                </button>
+                                    <div
+                                      role="slider"
+                                      tabIndex={0}
+                                      aria-label="Adjust end time"
+                                      aria-valuenow={new Date(booking.endTime).getTime()}
+                                      aria-valuemin={new Date(booking.startTime).getTime() + (effectiveSchedule?.timelineIntervalMinutes ?? 30) * 60 * 1000}
+                                      aria-valuemax={timelineEndUtc}
+                                      aria-valuetext={formatColomboTime(booking.endTime)}
+                                      title="Adjust end time"
+                                      onPointerDown={(e) => handleStartDrag(e, booking, res, "end")}
+                                      onKeyDown={(e) => {
+                                        if (e.key === "Enter" || e.key === " ") {
+                                          e.preventDefault();
+                                          openAccessibleEditModal(booking, res);
+                                        }
+                                      }}
+                                      className="group/end absolute right-0 top-0 bottom-0 w-4 z-20 cursor-col-resize flex items-center justify-center opacity-0 group-hover/block:opacity-70 hover:!opacity-100 focus-visible:opacity-100 bg-blue-500/10 hover:bg-blue-500/25 focus-visible:bg-blue-500/25 border-r-2 border-blue-500/40 hover:border-blue-600 focus-visible:border-blue-600 transition-opacity duration-150 select-none rounded-r-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
+                                    >
+                                      <div className="h-4 w-0.5 rounded-full bg-blue-600 shadow-xs" />
+                                      <span role="tooltip" className="pointer-events-none absolute bottom-full right-0 mb-1 whitespace-nowrap rounded bg-slate-900 px-2 py-1 text-[10px] font-medium text-white shadow-sm opacity-0 group-hover/end:opacity-100 group-focus-within/end:opacity-100 transition-opacity">Adjust end time</span>
+                                    </div>
+                                  </>
+                                )}
                               </div>
                             );
                           })}
@@ -1629,6 +1645,11 @@ export function TimelineGrid({
             </p>
 
             <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+              {confirmModalState.isStale && (
+                <Button type="button" variant="outline" size="sm" onClick={() => reloadLatestBooking(confirmModalState.reservationId)}>
+                  Reload Latest Booking
+                </Button>
+              )}
               <Button
                 type="button"
                 variant="outline"
@@ -1641,7 +1662,7 @@ export function TimelineGrid({
               <Button
                 type="button"
                 size="sm"
-                disabled={confirmModalState.isSubmitting}
+                disabled={confirmModalState.isSubmitting || confirmModalState.isStale}
                 onClick={handleConfirmTimeChange}
                 className="bg-blue-600 hover:bg-blue-700 text-white gap-1.5"
               >
@@ -1740,6 +1761,11 @@ export function TimelineGrid({
             </p>
 
             <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+              {accessibleEditModalState.isStale && (
+                <Button type="button" variant="outline" size="sm" onClick={() => reloadLatestBooking(accessibleEditModalState.reservationId)}>
+                  Reload Latest Booking
+                </Button>
+              )}
               <Button
                 type="button"
                 variant="outline"
@@ -1752,7 +1778,7 @@ export function TimelineGrid({
               <Button
                 type="button"
                 size="sm"
-                disabled={accessibleEditModalState.isSubmitting}
+                disabled={accessibleEditModalState.isSubmitting || accessibleEditModalState.isStale}
                 onClick={handleSaveAccessibleEdit}
                 className="bg-blue-600 hover:bg-blue-700 text-white gap-1.5"
               >

@@ -140,6 +140,9 @@ export async function updateReservationTime(input: UpdateReservationTimeInput) {
     if (!blocking.includes(existing.status)) {
       throw new ReservationError("INVALID_STATUS_TRANSITION", "Only pending or approved reservations can be rescheduled.");
     }
+    if (existing.startTime.getTime() === startTime.getTime() && existing.endTime.getTime() === endTime.getTime()) {
+      return { reservation: await tx.reservation.findUniqueOrThrow({ where: { id: existing.id }, select: reservationSelect }), timeChange: null };
+    }
     const shift = await activeShift(tx);
     if (shift && !bookingOperationalDate(startTime, endTime, shift)) {
       throw new ReservationError("OUTSIDE_SHIFT_HOURS", "The new interval must fit within the active office shift.");

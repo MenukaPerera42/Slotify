@@ -130,14 +130,14 @@ export async function getEffectiveSchedulingHours(input: EffectiveSchedulingHour
   const rows = await prisma.reservation.findMany({
     where: { resourceId: { in: resourceIds }, status: { in: ["PENDING", "APPROVED"] },
       startTime: { lt: queryEnd }, endTime: { gt: queryStart } },
-    select: { id: true, resourceId: true, departmentId: true, startTime: true, endTime: true,
+    select: { id: true, resourceId: true, departmentId: true, startTime: true, endTime: true, updatedAt: true,
       status: true, title: true, userId: true },
     orderBy: [{ startTime: "asc" }, { id: "asc" }],
   });
   const serialize = (row: typeof rows[number]) => ({
     resourceId: row.resourceId, startTime: row.startTime, endTime: row.endTime, status: row.status,
     outsideEffectiveWindow: !bookingOperationalDate(row.startTime, row.endTime, policy),
-    ...(user.role === "ADMIN" ? { id: row.id, title: row.title, userId: row.userId, departmentId: row.departmentId } : {}),
+    ...(user.role === "ADMIN" ? { id: row.id, title: row.title, userId: row.userId, departmentId: row.departmentId, updatedAt: row.updatedAt } : {}),
   });
   const occupancy = rows.filter((row) => row.startTime < window.endTime && row.endTime > window.startTime).map(serialize);
   const outsideWindowOccupancy = rows.filter((row) => !bookingOperationalDate(row.startTime, row.endTime, policy)).map(serialize);

@@ -81,13 +81,22 @@ try {
   const first = await makeReservation(60, 120);
   const second = await makeReservation(180, 240);
   const third = await makeReservation(240, 300);
-  let version = first.updatedAt.toISOString();
+  const schedule = ok(await action("getEffectiveSchedulingHoursAction", [{ date, resourceId: resource.id }], admin));
+  const scheduleBooking = schedule.occupancy.find((booking) => booking.id === first.id);
+  assert.equal(new Date(scheduleBooking.updatedAt).toISOString(), first.updatedAt.toISOString());
+  const memberSchedule = ok(await action("getEffectiveSchedulingHoursAction", [{ date, resourceId: resource.id }], member));
+  assert.ok(memberSchedule.occupancy.every((booking) => !booking.id && !booking.updatedAt));
+  let version = scheduleBooking.updatedAt;
   const edit = (start, end, expectedUpdatedAt = version, jar = admin) => action("updateReservationTimeAction", [{
     reservationId: first.id, startTime: iso(at(start)), endTime: iso(at(end)), expectedUpdatedAt,
   }], jar);
   fail(await edit(40, 120, version, member), "FORBIDDEN");
-  fail(await edit(120, 120), "INVALID_INPUT");
+  fail(await edit(120, 120), "INVALID_TIME_RANGE");
   fail(await edit(-30, 120), "OUTSIDE_SHIFT_HOURS");
+  const noOp = ok(await edit(60, 120));
+  assert.equal(noOp.reservation.updatedAt, version);
+  assert.equal(noOp.timeChange, null);
+  assert.equal(await prisma.reservationTimeChange.count({ where: { reservationId: first.id } }), 0);
   let updated = ok(await edit(30, 120)).reservation;
   assert.equal(updated.id, first.id);
   version = updated.updatedAt;
