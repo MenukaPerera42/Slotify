@@ -1,120 +1,46 @@
-# Entity-Relationship (ER) Diagram & Database Architecture
+# Slotify database architecture
 
-This document details the PostgreSQL database schema and domain model relationships designed and implemented for **Slotify**.
+Slotify uses PostgreSQL through Prisma 6. The final schema has **11 application tables**, **18 foreign keys**, and **five PostgreSQL enum types**. The [complete ERD](slotify-erd.svg), [overview](slotify-erd-overview.svg), and editable [DBML](slotify-erd.dbml) use physical PostgreSQL table and column names from `prisma/schema.prisma` (`@@map` where applicable). The 13 SQL migrations add constraints that Prisma's model alone cannot express.
 
----
+## Entities and relationships
 
-## 1. Mermaid Entity-Relationship Diagram
+| Table | Purpose and main links |
+| --- | --- |
+| `users` | Authenticated ADMIN or MEMBER; optional `departmentId` → `departments`. `email` is unique. |
+| `departments` | Named organizational units; `name` and `code` are unique. |
+| `resource_categories` | Categories for reservable assets; unique `name`. |
+| `resources` | Reservable rooms or equipment; required `categoryId` → `resource_categories`. |
+| `reservations` | A timed booking for one required `resourceId` → `resources`; optional `userId` (owner) → `users`, `createdByUserId` (creator) → `users`, and `departmentId` → `departments`. |
+| `notifications` | Required recipient → `users`; optional actor → `users` and optional booking → `reservations`. |
+| `office_shifts` | Scheduling policy with optional `updatedByUserId` → `users`. There is **no** booking-to-shift foreign key. |
+| `reservation_department_corrections` | Department correction audit: required booking, new department, and correcting user; previous department is optional. |
+| `reservation_time_changes` | Time-edit audit: required booking and changing user; stores old and new intervals. |
+| `email_verification_challenges` | Required subject user and optional initiating user. |
+| `auth_rate_limits` | Independent rate-limit record keyed by string; no foreign keys. |
 
-```mermaid
-erDiagram
-    users {
-        uuid id PK "Primary Key"
-        varchar name "User full name"
-        varchar email UK "Unique corporate email"
-        UserRole role "ADMIN | MEMBER"
-        timestamptz createdAt "Default CURRENT_TIMESTAMP"
-        timestamptz updatedAt "Auto-updated timestamp"
-    }
+All 18 physical relationships are one-to-many from the referenced row to referencing rows. No one-to-one or many-to-many relation is defined. A nullable foreign key means its child row can exist without the referenced parent. Parent rows can have zero child rows. The DBML records these cardinalities and the actual `ON DELETE` actions. Most business links use `RESTRICT`; notification recipients and challenge subjects use `CASCADE`, while notification actors, notification reservations, shift updaters, and challenge initiators use `SET NULL`.
 
-    resource_categories {
-        uuid id PK "Primary Key"
-        varchar name UK "Category name (unique)"
-        text description "Nullable description"
-        timestamptz createdAt "Default CURRENT_TIMESTAMP"
-    }
+### Booking ownership and departments
 
-    resources {
-        uuid id PK "Primary Key"
-        varchar name "Resource / room / equipment name"
-        text description "Nullable description"
-        uuid categoryId FK "Foreign Key -> resource_categories.id"
-        varchar location "Building, room, or rack position"
-        integer capacity "Nullable capacity"
-        boolean isActive "Default true"
-        timestamptz createdAt "Default CURRENT_TIMESTAMP"
-        timestamptz updatedAt "Auto-updated timestamp"
-    }
+`reservations.userId` identifies the individual owner when present; group or legacy reservations can have no owner. `createdByUserId` independently records who created the booking and is also nullable for historical compatibility. `departmentId` stores the booking's allocation, separate from the owner's current department. Historical rows may have a null department, but a database insert trigger requires an active department for every new reservation and, when an owner is set, requires that owner to be active in the same department. Department corrections retain the previous/new department IDs, actor, reason, and timestamp without replacing the booking ID.
 
-    reservations {
-        uuid id PK "Primary Key"
-        uuid resourceId FK "Foreign Key -> resources.id"
-        uuid userId FK "Foreign Key -> users.id"
-        varchar title "Booking title or purpose"
-        timestamptz startTime "Reservation start window"
-        timestamptz endTime "Reservation end window"
-        ReservationStatus status "PENDING | APPROVED | REJECTED | CANCELLED"
-        timestamptz createdAt "Default CURRENT_TIMESTAMP"
-        timestamptz updatedAt "Auto-updated timestamp"
-    }
+### Categories, shifts, and lifecycle
 
-    users ||--o{ reservations : "places (1:N, Restrict)"
-    resource_categories ||--o{ resources : "categorizes (1:N, Restrict)"
-    resources ||--o{ reservations : "allocated_to (1:N, Restrict)"
-```
+Each resource has exactly one category. A category can contain any number of resources. `office_shifts` stores a start minute, duration, mode, and active flag; a partial unique index allows only one active shift. Checks enforce a start minute of 0–1439, a duration of 1–1440 minutes, and 1440 minutes for `FULL_DAY`. Overnight scheduling is represented by a start minute plus duration, not by an end-minute column. Reservations do not reference a specific shift row; application validation applies the configured policy.
 
----
+`ReservationStatus` values are `PENDING`, `APPROVED`, `REJECTED`, and `CANCELLED`. A trigger permits `PENDING` → `APPROVED`/`REJECTED`/`CANCELLED` and `APPROVED` → `CANCELLED`; other status changes are rejected. `UserRole` is `ADMIN` or `MEMBER`. Other enums are `NotificationType` (`RESERVATION_REQUESTED`, `RESERVATION_APPROVED`, `RESERVATION_REJECTED`, `RESERVATION_CANCELLED`), `OfficeShiftMode` (`MORNING`, `EVENING`, `NIGHT`, `FULL_DAY`, `CUSTOM`), and `EmailChallengePurpose` (`REGISTRATION`, `EMAIL_CHANGE`).
 
-## 2. Model & Relationship Definitions
+## PostgreSQL integrity and concurrency
 
-### `users`
-- **Purpose**: Represents organization members scheduling reservations.
-- **Primary Key**: `id` (`UUID`, generated via `gen_random_uuid()` / `@default(uuid())`).
-- **Uniqueness**: `email` (`UNIQUE`).
-- **Enum**: `role` (`UserRole`: `ADMIN`, `MEMBER`).
-- **Relationships**: `1:N` with `reservations` (`onDelete: Restrict`).
-- **MVP Note**: Serves as the identity foundation for MVP assessment testing without mock session state or fake security.
+- `reservations_start_before_end_check` enforces `startTime < endTime`.
+- The `btree_gist` extension supports `reservations_no_overlap_blocking_excl`. This GiST exclusion constraint compares equal `resourceId` values and overlapping `tstzrange(startTime, endTime, '[)')` ranges, only for `PENDING` and `APPROVED` rows. Adjacent bookings are valid because the interval is half-open. `REJECTED` and `CANCELLED` rows stay in history without blocking availability. This is independent of department and prevents races between concurrent writers.
+- An insert trigger rejects reservations with no active department, an inactive or mismatched owner, or an inactive resource. A status trigger enforces the transitions above. A user trigger prevents removal of the last active administrator.
+- Migration-only checks require a nonblank department-correction reason, valid old/new time-audit intervals, bounded challenge attempts, and nonnegative challenge resends.
+- Migration-only unique indexes protect `lower(users.email)`, `lower(departments.name)`, `lower(departments.code)`, and `lower(resource_categories.name)`. Partial unique indexes restrict unconsumed email challenges and enforce one active shift. These are recorded as DBML notes because ordinary ERD relationships cannot represent their SQL predicates.
+- Indexed access paths include reservation resource/time, owner/time, department/time, creator, and status; notification recipient/read/time; audit booking/time and actor; and rate-limit reset time. The DBML includes schema-declared indexes. SQL-only expression and partial indexes are described above.
 
-### `resource_categories`
-- **Purpose**: Categorization for shared assets (e.g., *Meeting Rooms*, *Workstations & Pods*, *Lab & Hardware Equipment*).
-- **Primary Key**: `id` (`UUID`).
-- **Uniqueness**: `name` (`UNIQUE`).
-- **Relationships**: `1:N` with `resources` (`onDelete: Restrict`). Prevents accidental orphaned resources if a category is deleted.
+Prisma `@updatedAt` timestamps are managed on ORM updates; the `resource_categories.updatedAt` column also has a database default for raw inserts. The diagram shows database types and nullability, not a claim that every Prisma default is a PostgreSQL column default.
 
-### `resources`
-- **Purpose**: Physical or digital assets that can be reserved.
-- **Primary Key**: `id` (`UUID`).
-- **Foreign Keys**: `categoryId` (`UUID`, references `resource_categories.id`).
-- **Indexes**: `categoryId`, `isActive`.
-- **Relationships**: `1:N` with `reservations` (`onDelete: Restrict`).
+## Sharing and scope
 
-### `reservations`
-- **Purpose**: Time-bound resource bookings created by users.
-- **Primary Key**: `id` (`UUID`).
-- **Foreign Keys**: `resourceId` (`UUID`), `userId` (`UUID`).
-- **Timestamps**: `startTime`, `endTime` and audit timestamps (stored as UTC instants in PostgreSQL `timestamptz`; presented in `Asia/Colombo`).
-- **Check Constraint**: `reservations_start_before_end_check` enforcing `"startTime" < "endTime"`.
-- **Indexes**:
-  - `(resourceId, startTime, endTime)` compound index for rapid interval overlap querying.
-  - `userId` for quick user booking lookups.
-  - `status` for filtering pending/approved vs rejected/cancelled bookings.
-
----
-
-## 3. Concurrency Strategy & Overlap Prevention
-
-### The Problem with Application-Side Checks
-Relying solely on a `SELECT` query followed by an `INSERT` leaves a severe race condition window under concurrent requests. Two transactions executing concurrently can both read 0 conflicts and proceed to insert overlapping bookings.
-
-### The Problem with Composite Unique Constraints
-A composite unique constraint such as `UNIQUE (resourceId, startTime)` only checks for exact timestamp equivalence. It **cannot** detect arbitrary interval intersections (e.g., Booking A: 09:00–10:30 and Booking B: 10:00–11:00).
-
-### The Database-Level Solution: PostgreSQL GiST Exclusion Constraint
-We leverage PostgreSQL's native `btree_gist` extension and an **`EXCLUDE USING gist`** constraint:
-
-```sql
-CREATE EXTENSION IF NOT EXISTS btree_gist;
-
-ALTER TABLE "reservations" ADD CONSTRAINT "reservations_no_overlap_blocking_excl"
-EXCLUDE USING gist (
-  "resourceId" WITH =,
-  tstzrange("startTime", "endTime", '[)') WITH &&
-)
-WHERE ("status" IN ('PENDING', 'APPROVED'));
-```
-
-#### Why `[)` (Half-Open Interval)?
-- `[startTime, endTime)` includes the exact start millisecond but excludes the end millisecond.
-- This permits **adjacent back-to-back bookings** (e.g. 09:00–10:00 followed immediately by 10:00–11:00 on the same room) with zero gaps, while strictly blocking any true overlap.
-- The partial clause `WHERE ("status" IN ('PENDING', 'APPROVED'))` ensures that rejected and cancelled reservations do not block future reservations on that same time window.
-
+For a submission, use the local SVG or PNG and the [DBML source](slotify-erd.dbml). The README contains a stateless dbdiagram.io link derived from the DBML, plus instructions for importing it into an account if an editable saved diagram is required. The link contains schema text, no records or credentials. Diagram arrows summarize foreign keys; SQL checks, triggers, partial indexes, and exclusion rules are described here and in DBML notes.

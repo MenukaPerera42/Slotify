@@ -1,0 +1,250 @@
+// Slotify physical PostgreSQL schema; generated from Prisma model metadata and reviewed against 13 SQL migrations.
+Enum UserRole {
+  ADMIN
+  MEMBER
+}
+
+Enum ReservationStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
+Enum NotificationType {
+  RESERVATION_REQUESTED
+  RESERVATION_APPROVED
+  RESERVATION_REJECTED
+  RESERVATION_CANCELLED
+}
+
+Enum OfficeShiftMode {
+  MORNING
+  EVENING
+  NIGHT
+  FULL_DAY
+  CUSTOM
+}
+
+Enum EmailChallengePurpose {
+  REGISTRATION
+  EMAIL_CHANGE
+}
+
+Table users {
+  id uuid [pk, not null]
+  name text [not null]
+  firstName text
+  lastName text
+  email text [unique, not null]
+  role UserRole [not null]
+  passwordHash text
+  isActive boolean [not null]
+  emailVerifiedAt timestamptz(3)
+  emailVerificationRequiredAt timestamptz(3)
+  sessionVersion integer [not null]
+  departmentId uuid [note: 'FK to departments.id; ON DELETE RESTRICT']
+  createdAt timestamptz(3) [not null]
+  updatedAt timestamptz(3) [not null]
+
+  indexes {
+    (departmentId)
+  }
+
+  Note: 'A separate unique index on lower(email) enforces case-insensitive email uniqueness; last-active-admin trigger protects ADMIN access.'
+}
+
+Table email_verification_challenges {
+  id uuid [pk, not null]
+  userId uuid [not null, note: 'FK to users.id; ON DELETE CASCADE']
+  initiatedByUserId uuid [note: 'FK to users.id; ON DELETE SET NULL']
+  purpose EmailChallengePurpose [not null]
+  targetEmail text [not null]
+  codeHash text [not null]
+  expiresAt timestamptz(3) [not null]
+  attemptsRemaining integer [not null]
+  resendCount integer [not null]
+  lastSentAt timestamptz(3) [not null]
+  consumedAt timestamptz(3)
+  createdAt timestamptz(3) [not null]
+  updatedAt timestamptz(3) [not null]
+
+  indexes {
+    (userId, purpose, createdAt) [name: 'email_challenges_user_purpose_created_idx']
+    (targetEmail) [name: 'email_challenges_targetEmail_idx']
+  }
+
+  Note: 'CHECK attemptsRemaining 0..5 and resendCount >= 0; partial unique indexes for unconsumed (userId,purpose) and lower(targetEmail).'
+}
+
+Table office_shifts {
+  id uuid [pk, not null]
+  name text [unique, not null]
+  mode OfficeShiftMode [not null]
+  description text
+  startMinute integer [not null]
+  durationMinutes integer [not null]
+  isActive boolean [not null]
+  updatedByUserId uuid [note: 'FK to users.id; ON DELETE SET NULL']
+  createdAt timestamptz(3) [not null]
+  updatedAt timestamptz(3) [not null]
+
+  indexes {
+    (isActive)
+  }
+
+  Note: 'CHECK startMinute 0..1439; durationMinutes 1..1440; FULL_DAY requires 1440; partial unique index permits only one active shift.'
+}
+
+Table departments {
+  id uuid [pk, not null]
+  name text [unique, not null]
+  code text [unique, not null]
+  description text
+  isActive boolean [not null]
+  createdAt timestamptz(3) [not null]
+  updatedAt timestamptz(3) [not null]
+
+  indexes {
+    (isActive)
+  }
+
+  Note: 'Separate unique indexes on lower(name) and lower(code) enforce case-insensitive uniqueness.'
+}
+
+Table auth_rate_limits {
+  key text [pk, not null]
+  attempts integer [not null]
+  resetAt timestamptz(3) [not null]
+
+  indexes {
+    (resetAt)
+  }
+}
+
+Table resource_categories {
+  id uuid [pk, not null]
+  name text [unique, not null]
+  description text
+  isActive boolean [not null]
+  createdAt timestamptz(3) [not null]
+  updatedAt timestamptz(3) [not null]
+
+  Note: 'Separate unique index on lower(name) enforces case-insensitive uniqueness.'
+}
+
+Table resources {
+  id uuid [pk, not null]
+  name text [not null]
+  description text
+  categoryId uuid [not null, note: 'FK to resource_categories.id; ON DELETE RESTRICT']
+  location text [not null]
+  capacity integer
+  isActive boolean [not null]
+  createdAt timestamptz(3) [not null]
+  updatedAt timestamptz(3) [not null]
+
+  indexes {
+    (categoryId)
+    (isActive)
+  }
+}
+
+Table reservations {
+  id uuid [pk, not null]
+  resourceId uuid [not null, note: 'FK to resources.id; ON DELETE RESTRICT']
+  userId uuid [note: 'FK to users.id; ON DELETE RESTRICT']
+  departmentId uuid [note: 'FK to departments.id; ON DELETE RESTRICT']
+  createdByUserId uuid [note: 'FK to users.id; ON DELETE RESTRICT']
+  title text [not null]
+  startTime timestamptz(3) [not null]
+  endTime timestamptz(3) [not null]
+  status ReservationStatus [not null]
+  createdAt timestamptz(3) [not null]
+  updatedAt timestamptz(3) [not null]
+
+  indexes {
+    (resourceId, startTime, endTime)
+    (userId)
+    (userId, startTime)
+    (departmentId, startTime)
+    (createdByUserId)
+    (status)
+  }
+
+  Note: 'CHECK startTime < endTime; GiST EXCLUDE on resourceId and half-open [startTime,endTime) for PENDING or APPROVED; status and department insert triggers. See architecture document.'
+}
+
+Table reservation_department_corrections {
+  id uuid [pk, not null]
+  reservationId uuid [not null, note: 'FK to reservations.id; ON DELETE RESTRICT']
+  previousDepartmentId uuid [note: 'FK to departments.id; ON DELETE RESTRICT']
+  newDepartmentId uuid [not null, note: 'FK to departments.id; ON DELETE RESTRICT']
+  correctedByUserId uuid [not null, note: 'FK to users.id; ON DELETE RESTRICT']
+  reason text [not null]
+  createdAt timestamptz(3) [not null]
+
+  indexes {
+    (reservationId, createdAt)
+    (correctedByUserId)
+  }
+
+  Note: 'CHECK reason is nonblank; append-only audit by application convention.'
+}
+
+Table reservation_time_changes {
+  id uuid [pk, not null]
+  reservationId uuid [not null, note: 'FK to reservations.id; ON DELETE RESTRICT']
+  changedByUserId uuid [not null, note: 'FK to users.id; ON DELETE RESTRICT']
+  previousStartTime timestamptz(3) [not null]
+  previousEndTime timestamptz(3) [not null]
+  newStartTime timestamptz(3) [not null]
+  newEndTime timestamptz(3) [not null]
+  changedAt timestamptz(3) [not null]
+
+  indexes {
+    (reservationId, changedAt)
+    (changedByUserId)
+  }
+
+  Note: 'CHECK previous and new intervals each have start < end; application audit of booking time changes.'
+}
+
+Table notifications {
+  id uuid [pk, not null]
+  recipientUserId uuid [not null, note: 'FK to users.id; ON DELETE CASCADE']
+  actorUserId uuid [note: 'FK to users.id; ON DELETE SET NULL']
+  reservationId uuid [note: 'FK to reservations.id; ON DELETE SET NULL']
+  type NotificationType [not null]
+  title text [not null]
+  message text [not null]
+  isRead boolean [not null]
+  createdAt timestamptz(3) [not null]
+  readAt timestamptz(3)
+
+  indexes {
+    (recipientUserId, isRead, createdAt)
+    (recipientUserId, createdAt)
+    (reservationId)
+    (actorUserId)
+  }
+}
+
+Ref: departments.id ?<? users.departmentId [delete: restrict]
+Ref: users.id <? email_verification_challenges.userId [delete: cascade]
+Ref: users.id ?<? email_verification_challenges.initiatedByUserId [delete: set null]
+Ref: users.id ?<? office_shifts.updatedByUserId [delete: set null]
+Ref: resource_categories.id <? resources.categoryId [delete: restrict]
+Ref: resources.id <? reservations.resourceId [delete: restrict]
+Ref: users.id ?<? reservations.userId [delete: restrict]
+Ref: departments.id ?<? reservations.departmentId [delete: restrict]
+Ref: users.id ?<? reservations.createdByUserId [delete: restrict]
+Ref: reservations.id <? reservation_department_corrections.reservationId [delete: restrict]
+Ref: departments.id ?<? reservation_department_corrections.previousDepartmentId [delete: restrict]
+Ref: departments.id <? reservation_department_corrections.newDepartmentId [delete: restrict]
+Ref: users.id <? reservation_department_corrections.correctedByUserId [delete: restrict]
+Ref: reservations.id <? reservation_time_changes.reservationId [delete: restrict]
+Ref: users.id <? reservation_time_changes.changedByUserId [delete: restrict]
+Ref: users.id <? notifications.recipientUserId [delete: cascade]
+Ref: users.id ?<? notifications.actorUserId [delete: set null]
+Ref: reservations.id ?<? notifications.reservationId [delete: set null]
