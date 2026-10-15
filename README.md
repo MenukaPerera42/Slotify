@@ -154,7 +154,7 @@ After changing `prisma/schema.prisma`, stop the running Next.js dev server, appl
 
 ---
 
-## Stage 4 authentication and local assessment
+## Authentication and local assessment
 
 Auth.js Credentials handles login, logout, CSRF protection, and an encrypted HTTP-only session cookie (8-hour maximum age). Argon2id hashes are stored in `users.passwordHash`. Each protected server render or mutation reloads the current user from PostgreSQL, so role changes and deactivation take effect immediately. Set a strong `AUTH_SECRET` in the ignored `.env` file; use `openssl rand -base64 32` to generate it. Set `AUTH_URL` to the exact application origin (including port). HTTPS deployments use secure cookies.
 
@@ -177,13 +177,13 @@ Reservation statuses are `PENDING`, `APPROVED`, `REJECTED`, and `CANCELLED`. Six
 
 Booking and approval actions use server-side identity checks and translate PostgreSQL overlap conflicts into a slot-conflict message.
 
-## Stage 4.1 sign-up and branding
+## Sign-up and branding
 
 The supplied `public/logo.png` is used in the sidebar and authentication pages. It is a wide wordmark, so the existing valid favicon remains in use. Admin account creation is not exposed publicly; only an authorized admin can promote a member from Administration. Run `npm run db:setup-demo`, `npx prisma migrate deploy`, and `npm run db:seed` for a fresh local setup.
 
 With the app running locally, run `npm run test:auth` to execute the Stage 4.1 integration suite. Set `SLOTIFY_TEST_URL` to that server's origin when it is not `http://localhost:3000`, and make sure `AUTH_URL` matches the server origin. The suite creates and removes synthetic test users with generated credentials.
 
-## Stage 8C — final database ERD
+## Final database ERD
 
 The final PostgreSQL design has **11 application tables and 18 foreign keys**. See the [complete SVG](docs/slotify-erd.svg), [PNG](docs/slotify-erd.png), [business overview](docs/slotify-erd-overview.svg), editable [DBML](docs/slotify-erd.dbml), and [database architecture notes](docs/database-architecture.md). The diagram is based on the final Prisma schema and all SQL migrations.
 
