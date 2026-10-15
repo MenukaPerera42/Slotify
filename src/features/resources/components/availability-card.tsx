@@ -21,7 +21,7 @@ import { getResourceBookingCta } from "@/features/reservations/utils/client-date
 
 interface AvailabilityCardProps {
   resource: ResourceItem;
-  categories: { id: string; name: string }[];
+  categories: { id: string; name: string; isActive?: boolean }[];
   canManage?: boolean;
   selectedDate?: string;
   hasBookingsToday?: boolean;
@@ -193,6 +193,7 @@ export function AvailabilityCard({
           onClose={() => setIsEditOpen(false)}
           categories={categories}
           resource={resource}
+          isAdmin={canManage}
         />
       )}
     </>

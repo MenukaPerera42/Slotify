@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useCallback } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   Users,
   UserPlus,
@@ -18,6 +18,7 @@ import {
   UserX,
   Clock,
   Briefcase,
+  Layers,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
@@ -37,6 +38,8 @@ import {
 } from "@/features/reservations/actions/reservation-actions";
 import { formatColomboInterval, formatColomboDate } from "@/features/reservations/utils/client-date";
 import { AdminOfficeShifts } from "@/features/office-shifts/components/admin-office-shifts";
+import { AdminDepartments } from "@/features/departments/components/admin-departments";
+import { AdminCategories } from "@/features/resources/components/admin-categories";
 
 export interface AdminUserRecord {
   id: string;
@@ -79,7 +82,35 @@ export function AdminUserManager({
   const toast = useToast();
 
   // Navigation tab
-  const [activeTab, setActiveTab] = useState<"users" | "unassigned" | "shifts">("users");
+  const searchParams = useSearchParams();
+  const tabParam = searchParams.get("tab");
+  const getInitialTab = (): "users" | "departments" | "categories" | "shifts" | "unassigned" => {
+    if (tabParam === "departments") return "departments";
+    if (tabParam === "categories") return "categories";
+    if (tabParam === "shifts") return "shifts";
+    if (tabParam === "unassigned") return "unassigned";
+    return "users";
+  };
+
+  const [activeTab, setActiveTab] = useState<
+    "users" | "departments" | "categories" | "shifts" | "unassigned"
+  >(getInitialTab);
+
+  const handleTabChange = (
+    tab: "users" | "departments" | "categories" | "shifts" | "unassigned"
+  ) => {
+    setActiveTab(tab);
+    const params = new URLSearchParams(
+      searchParams ? Array.from(searchParams.entries()) : []
+    );
+    if (tab === "users") {
+      params.delete("tab");
+    } else {
+      params.set("tab", tab);
+    }
+    const query = params.toString();
+    router.replace(`/administration${query ? `?${query}` : ""}`, { scroll: false });
+  };
 
   // User filters & search
   const [search, setSearch] = useState("");
@@ -393,123 +424,178 @@ export function AdminUserManager({
 
   return (
     <div className="space-y-6">
-      {/* Metric Cards Row */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3.5">
-        <div className="p-4 rounded-xl border border-slate-200/80 bg-white shadow-2xs">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-medium text-slate-500">Total Users</span>
-            <Users className="h-4 w-4 text-blue-600" />
-          </div>
-          <p className="text-2xl font-bold text-slate-900 mt-1">{totalUsers}</p>
-        </div>
+      {/* 1. Top-Level Administration Tabs */}
+      <div className="flex flex-wrap items-center gap-1.5 p-1 bg-slate-100/80 rounded-xl border border-slate-200/80 w-fit">
+        <button
+          type="button"
+          onClick={() => handleTabChange("users")}
+          className={cn(
+            "px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2",
+            activeTab === "users" || activeTab === "unassigned"
+              ? "bg-white text-blue-600 shadow-2xs"
+              : "text-slate-600 hover:text-slate-900"
+          )}
+        >
+          <Users className="h-4 w-4" />
+          <span>Users</span>
+          {unassignedCount > 0 && (
+            <span className="text-[10px] font-bold px-1.5 py-0.2 rounded-full bg-amber-100 text-amber-800">
+              {unassignedCount}
+            </span>
+          )}
+        </button>
 
-        <div className="p-4 rounded-xl border border-slate-200/80 bg-white shadow-2xs">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-medium text-slate-500">Active Members</span>
-            <UserCheck className="h-4 w-4 text-emerald-600" />
-          </div>
-          <p className="text-2xl font-bold text-slate-900 mt-1">{activeUsersCount}</p>
-        </div>
+        <button
+          type="button"
+          onClick={() => handleTabChange("departments")}
+          className={cn(
+            "px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2",
+            activeTab === "departments"
+              ? "bg-white text-blue-600 shadow-2xs"
+              : "text-slate-600 hover:text-slate-900"
+          )}
+        >
+          <Building2 className="h-4 w-4" />
+          <span>Departments</span>
+        </button>
 
-        <div className="p-4 rounded-xl border border-slate-200/80 bg-white shadow-2xs">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-medium text-slate-500">Administrators</span>
-            <Shield className="h-4 w-4 text-indigo-600" />
-          </div>
-          <p className="text-2xl font-bold text-slate-900 mt-1">{adminUsersCount}</p>
-        </div>
+        <button
+          type="button"
+          onClick={() => handleTabChange("categories")}
+          className={cn(
+            "px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2",
+            activeTab === "categories"
+              ? "bg-white text-blue-600 shadow-2xs"
+              : "text-slate-600 hover:text-slate-900"
+          )}
+        >
+          <Layers className="h-4 w-4" />
+          <span>Resource Categories</span>
+        </button>
 
-        <div className="p-4 rounded-xl border border-slate-200/80 bg-white shadow-2xs">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-medium text-slate-500">Legacy Bookings</span>
-            <AlertTriangle className={cn("h-4 w-4", unassignedCount > 0 ? "text-amber-500" : "text-slate-400")} />
-          </div>
-          <div className="flex items-center gap-1.5 mt-1">
-            <p className="text-2xl font-bold text-slate-900">{unassignedCount}</p>
-            {unassignedCount > 0 && (
-              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-800">
-                Needs Review
-              </span>
-            )}
-          </div>
-        </div>
+        <button
+          type="button"
+          onClick={() => handleTabChange("shifts")}
+          className={cn(
+            "px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2",
+            activeTab === "shifts"
+              ? "bg-white text-blue-600 shadow-2xs"
+              : "text-slate-600 hover:text-slate-900"
+          )}
+        >
+          <Clock className="h-4 w-4" />
+          <span>Office Shifts</span>
+        </button>
       </div>
 
-      {/* Tabs and Add Member Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200 pb-3">
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => setActiveTab("users")}
-            className={cn(
-              "px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-2",
-              activeTab === "users"
-                ? "bg-blue-600 text-white shadow-xs"
-                : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-            )}
-          >
-            <Users className="h-3.5 w-3.5" />
-            Team Directory ({users.length})
-          </button>
+      {/* 2. USERS SECTION: Metric Cards & Sub-Tabs */}
+      {(activeTab === "users" || activeTab === "unassigned") && (
+        <>
+          {/* Metric Cards Row */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3.5">
+            <div className="p-4 rounded-xl border border-slate-200/80 bg-white shadow-2xs">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-medium text-slate-500">Total Users</span>
+                <Users className="h-4 w-4 text-blue-600" />
+              </div>
+              <p className="text-2xl font-bold text-slate-900 mt-1">{totalUsers}</p>
+            </div>
 
-          <button
-            type="button"
-            onClick={() => {
-              setActiveTab("unassigned");
-              fetchUnassigned();
-            }}
-            className={cn(
-              "px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-2",
-              activeTab === "unassigned"
-                ? "bg-blue-600 text-white shadow-xs"
-                : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-            )}
-          >
-            <Clock className="h-3.5 w-3.5" />
-            Historical Unassigned Bookings
-            {unassignedCount > 0 && (
-              <span
+            <div className="p-4 rounded-xl border border-slate-200/80 bg-white shadow-2xs">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-medium text-slate-500">Active Members</span>
+                <UserCheck className="h-4 w-4 text-emerald-600" />
+              </div>
+              <p className="text-2xl font-bold text-slate-900 mt-1">{activeUsersCount}</p>
+            </div>
+
+            <div className="p-4 rounded-xl border border-slate-200/80 bg-white shadow-2xs">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-medium text-slate-500">Administrators</span>
+                <Shield className="h-4 w-4 text-indigo-600" />
+              </div>
+              <p className="text-2xl font-bold text-slate-900 mt-1">{adminUsersCount}</p>
+            </div>
+
+            <div className="p-4 rounded-xl border border-slate-200/80 bg-white shadow-2xs">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-medium text-slate-500">Legacy Bookings</span>
+                <AlertTriangle className={cn("h-4 w-4", unassignedCount > 0 ? "text-amber-500" : "text-slate-400")} />
+              </div>
+              <div className="flex items-center gap-1.5 mt-1">
+                <p className="text-2xl font-bold text-slate-900">{unassignedCount}</p>
+                {unassignedCount > 0 && (
+                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-800">
+                    Needs Review
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Sub-Tabs: Team Directory vs Historical Unassigned Bookings */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200 pb-3">
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setActiveTab("users")}
                 className={cn(
-                  "text-[10px] px-1.5 py-0.2 rounded-full font-bold",
-                  activeTab === "unassigned"
-                    ? "bg-white text-blue-700"
-                    : "bg-amber-100 text-amber-800"
+                  "px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-2",
+                  activeTab === "users"
+                    ? "bg-blue-600 text-white shadow-xs"
+                    : "bg-slate-100 text-slate-600 hover:bg-slate-200"
                 )}
               >
-                {unassignedCount}
-              </span>
-            )}
-          </button>
+                <Users className="h-3.5 w-3.5" />
+                Team Directory ({users.length})
+              </button>
 
-          <button
-            type="button"
-            onClick={() => setActiveTab("shifts")}
-            className={cn(
-              "px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-2",
-              activeTab === "shifts"
-                ? "bg-blue-600 text-white shadow-xs"
-                : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-            )}
-          >
-            <Clock className="h-3.5 w-3.5" />
-            Scheduling &amp; Office Hours
-          </button>
-        </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setActiveTab("unassigned");
+                  fetchUnassigned();
+                }}
+                className={cn(
+                  "px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-2",
+                  activeTab === "unassigned"
+                    ? "bg-blue-600 text-white shadow-xs"
+                    : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                )}
+              >
+                <Clock className="h-3.5 w-3.5" />
+                Historical Unassigned Bookings
+                {unassignedCount > 0 && (
+                  <span
+                    className={cn(
+                      "text-[10px] px-1.5 py-0.2 rounded-full font-bold",
+                      activeTab === "unassigned"
+                        ? "bg-white text-blue-700"
+                        : "bg-amber-100 text-amber-800"
+                    )}
+                  >
+                    {unassignedCount}
+                  </span>
+                )}
+              </button>
+            </div>
 
-        {activeTab === "users" && (
-          <Button
-            type="button"
-            onClick={() => {
-              setFieldErrors({});
-              setIsAddModalOpen(true);
-            }}
-            className="h-9 px-4 rounded-xl text-xs font-semibold bg-blue-600 hover:bg-blue-700 text-white gap-2 shadow-xs"
-          >
-            <UserPlus className="h-4 w-4" />
-            Add Member
-          </Button>
-        )}
-      </div>
+            {activeTab === "users" && (
+              <Button
+                type="button"
+                onClick={() => {
+                  setFieldErrors({});
+                  setIsAddModalOpen(true);
+                }}
+                className="h-9 px-4 rounded-xl text-xs font-semibold bg-blue-600 hover:bg-blue-700 text-white gap-2 shadow-xs"
+              >
+                <UserPlus className="h-4 w-4" />
+                Add Member
+              </Button>
+            )}
+          </div>
+        </>
+      )}
 
       {/* TAB 1: USERS DIRECTORY */}
       {activeTab === "users" && (
@@ -870,7 +956,13 @@ export function AdminUserManager({
         </div>
       )}
 
-      {/* TAB 3: OFFICE HOURS & SHIFTS */}
+      {/* TAB: DEPARTMENTS */}
+      {activeTab === "departments" && <AdminDepartments />}
+
+      {/* TAB: RESOURCE CATEGORIES */}
+      {activeTab === "categories" && <AdminCategories />}
+
+      {/* TAB: OFFICE HOURS & SHIFTS */}
       {activeTab === "shifts" && <AdminOfficeShifts />}
 
       {/* MODAL 1: ADD MEMBER */}

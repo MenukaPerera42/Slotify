@@ -32,7 +32,7 @@ interface ResourcesPageClientProps {
     role: "ADMIN" | "MEMBER";
   };
   resources: ResourceItem[];
-  categories: { id: string; name: string }[];
+  categories: { id: string; name: string; isActive?: boolean }[];
   departments?: { id: string; name: string; code: string }[];
   selectedCategory?: string;
   selectedStatus?: string;

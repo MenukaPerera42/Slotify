@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { requireUser } from "@/lib/authorization";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
@@ -46,12 +47,14 @@ export default async function AdministrationPage() {
         description="Manage organizational users, department assignments, access roles, and scheduling policies."
       />
       <main className="flex-1 px-8 pb-12 max-w-7xl w-full space-y-6">
-        <AdminUserManager
-          users={users}
-          departments={departments}
-          currentAdminId={actor.id}
-          initialUnassignedCount={unassignedCount}
-        />
+        <Suspense fallback={<div className="p-8 text-center text-slate-500 font-medium text-sm">Loading administration portal...</div>}>
+          <AdminUserManager
+            users={users}
+            departments={departments}
+            currentAdminId={actor.id}
+            initialUnassignedCount={unassignedCount}
+          />
+        </Suspense>
       </main>
     </div>
   );

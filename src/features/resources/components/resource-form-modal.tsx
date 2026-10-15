@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 import { useFormStatus } from "react-dom";
 import { Modal } from "@/components/ui/modal";
@@ -10,6 +11,7 @@ import { createResourceAction, updateResourceAction } from "../actions/resource-
 interface CategoryOption {
   id: string;
   name: string;
+  isActive?: boolean;
 }
 
 interface ResourceFormDataProp {
@@ -27,6 +29,7 @@ interface ResourceFormModalProps {
   onClose: () => void;
   categories: CategoryOption[];
   resource?: ResourceFormDataProp | null;
+  isAdmin?: boolean;
 }
 
 function SubmitButton({ isEditing }: { isEditing: boolean }) {
@@ -50,6 +53,7 @@ export function ResourceFormModal({
   onClose,
   categories,
   resource,
+  isAdmin = false,
 }: ResourceFormModalProps) {
   const isEditing = Boolean(resource?.id);
   const [error, setError] = useState<string | null>(null);
@@ -128,12 +132,22 @@ export function ResourceFormModal({
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
-            <label
-              htmlFor="categoryId"
-              className="block text-xs font-semibold text-slate-700 mb-1"
-            >
-              Category <span className="text-rose-500">*</span>
-            </label>
+            <div className="flex items-center justify-between mb-1">
+              <label
+                htmlFor="categoryId"
+                className="block text-xs font-semibold text-slate-700"
+              >
+                Category <span className="text-rose-500">*</span>
+              </label>
+              {isAdmin && (
+                <Link
+                  href="/administration?tab=categories"
+                  className="text-[11px] font-semibold text-blue-600 hover:text-blue-700 hover:underline"
+                >
+                  Manage Categories
+                </Link>
+              )}
+            </div>
             <select
               id="categoryId"
               name="categoryId"
@@ -141,11 +155,14 @@ export function ResourceFormModal({
               required
               className="flex h-9 w-full rounded-lg border border-slate-200 bg-white px-3 py-1 text-sm shadow-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:border-transparent text-slate-900"
             >
-              {categories.map((cat) => (
-                <option key={cat.id} value={cat.id}>
-                  {cat.name}
-                </option>
-              ))}
+              {categories
+                .filter((cat) => cat.isActive !== false || cat.id === resource?.categoryId)
+                .map((cat) => (
+                  <option key={cat.id} value={cat.id}>
+                    {cat.name}
+                    {cat.isActive === false ? " (Inactive)" : ""}
+                  </option>
+                ))}
             </select>
             {fieldErrors.categoryId && (
               <p className="mt-1 text-xs text-rose-600 font-medium">

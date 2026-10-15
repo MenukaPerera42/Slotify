@@ -38,7 +38,7 @@ export interface ResourceItem {
 
 interface ResourceCardProps {
   resource: ResourceItem;
-  categories: { id: string; name: string }[];
+  categories: { id: string; name: string; isActive?: boolean }[];
 }
 
 export function ResourceCard({ resource, categories }: ResourceCardProps) {
@@ -156,6 +156,7 @@ export function ResourceCard({ resource, categories }: ResourceCardProps) {
         onClose={() => setIsEditOpen(false)}
         categories={categories}
         resource={resource}
+        isAdmin={true}
       />
     </>
   );

@@ -18,6 +18,7 @@ export const departmentListSchema = z.strictObject({
   pageSize: z.number().int().min(1).max(100).default(50),
 });
 export const setDepartmentStatusSchema = z.strictObject({ id: departmentIdSchema, isActive: z.boolean() });
+export const deleteDepartmentSchema = departmentIdSchema;
 export const assignUserDepartmentSchema = z.strictObject({ userId: departmentIdSchema, departmentId: departmentIdSchema });
 export const usersByDepartmentSchema = z.strictObject({
   departmentId: departmentIdSchema,

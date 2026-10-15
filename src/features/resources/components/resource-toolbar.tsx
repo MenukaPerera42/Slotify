@@ -10,6 +10,7 @@ import { DateStripBar } from "./date-strip-bar";
 interface CategoryItem {
   id: string;
   name: string;
+  isActive?: boolean;
 }
 
 interface ResourceToolbarProps {
@@ -200,6 +201,7 @@ export function ResourceToolbar({
           isOpen={isAddOpen}
           onClose={() => setIsAddOpen(false)}
           categories={categories}
+          isAdmin={canManage}
         />
       )}
     </>

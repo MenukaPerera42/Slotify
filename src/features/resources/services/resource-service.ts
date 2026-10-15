@@ -8,6 +8,14 @@ export async function getCategories() {
   });
 }
 
+export async function getActiveResourceCategories() {
+  return prisma.resourceCategory.findMany({ where: { isActive: true }, orderBy: { name: "asc" } });
+}
+
+export class ResourceCategoryAssignmentError extends Error {
+  constructor(public readonly code: "NOT_FOUND" | "INACTIVE_CATEGORY", message: string) { super(message); }
+}
+
 export async function getResources(params?: ResourceQueryParams) {
   const where: Record<string, unknown> = {};
 
@@ -62,16 +70,12 @@ export async function getResourceById(id: string) {
 
 export async function createResource(data: ResourceFormData) {
   await requireAdmin();
-  // Verify category exists
-  const category = await prisma.resourceCategory.findUnique({
-    where: { id: data.categoryId },
-  });
-
-  if (!category) {
-    throw new Error("Specified resource category does not exist.");
-  }
-
-  return await prisma.resource.create({
+  return prisma.$transaction(async (tx) => {
+    const rows = await tx.$queryRaw<Array<{ id: string; isActive: boolean }>>`
+      SELECT id, "isActive" FROM resource_categories WHERE id = ${data.categoryId}::uuid FOR SHARE`;
+    if (!rows[0]) throw new ResourceCategoryAssignmentError("NOT_FOUND", "Specified resource category does not exist.");
+    if (!rows[0].isActive) throw new ResourceCategoryAssignmentError("INACTIVE_CATEGORY", "Select an active resource category.");
+    return tx.resource.create({
     data: {
       name: data.name,
       description: data.description,
@@ -83,6 +87,7 @@ export async function createResource(data: ResourceFormData) {
     include: {
       category: true,
     },
+    });
   });
 }
 
@@ -97,16 +102,12 @@ export async function updateResource(id: string, data: ResourceFormData) {
     throw new Error("Resource not found.");
   }
 
-  // Verify category exists
-  const category = await prisma.resourceCategory.findUnique({
-    where: { id: data.categoryId },
-  });
-
-  if (!category) {
-    throw new Error("Specified resource category does not exist.");
-  }
-
-  return await prisma.resource.update({
+  return prisma.$transaction(async (tx) => {
+    const rows = await tx.$queryRaw<Array<{ id: string; isActive: boolean }>>`
+      SELECT id, "isActive" FROM resource_categories WHERE id = ${data.categoryId}::uuid FOR SHARE`;
+    if (!rows[0]) throw new ResourceCategoryAssignmentError("NOT_FOUND", "Specified resource category does not exist.");
+    if (!rows[0].isActive && existing.categoryId !== data.categoryId) throw new ResourceCategoryAssignmentError("INACTIVE_CATEGORY", "Select an active resource category.");
+    return tx.resource.update({
     where: { id },
     data: {
       name: data.name,
@@ -119,6 +120,7 @@ export async function updateResource(id: string, data: ResourceFormData) {
     include: {
       category: true,
     },
+    });
   });
 }
 

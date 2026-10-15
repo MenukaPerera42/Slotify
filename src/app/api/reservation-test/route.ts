@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import * as actions from "@/features/reservations/actions/reservation-actions";
 import * as resourceActions from "@/features/resources/actions/resource-actions";
+import * as categoryActions from "@/features/resources/actions/category-actions";
 import * as notificationActions from "@/features/notifications/actions/notification-actions";
 import * as departmentActions from "@/features/departments/actions/department-actions";
 import * as dashboardActions from "@/features/dashboard/actions/dashboard-actions";
@@ -8,7 +9,7 @@ import * as adminUserActions from "@/features/admin-users/actions/admin-user-act
 import * as officeShiftActions from "@/features/office-shifts/actions/office-shift-actions";
 import { registerMemberAction } from "@/app/signup/actions";
 
-const actionRegistry = { ...actions, ...resourceActions, ...notificationActions, ...departmentActions, ...dashboardActions, ...adminUserActions, ...officeShiftActions,
+const actionRegistry = { ...actions, ...resourceActions, ...categoryActions, ...notificationActions, ...departmentActions, ...dashboardActions, ...adminUserActions, ...officeShiftActions,
   registerMemberAction };
 
 // Integration harness only. It is inert unless explicitly enabled in a local test server.

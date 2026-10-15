@@ -4,12 +4,12 @@ import { Prisma } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import {
-  assignUserDepartmentSchema, createDepartmentSchema, departmentIdSchema,
+  assignUserDepartmentSchema, createDepartmentSchema, departmentIdSchema, deleteDepartmentSchema,
   departmentListSchema, setDepartmentStatusSchema, updateDepartmentSchema, usersByDepartmentSchema,
 } from "../schemas/department-schema";
 import { DepartmentError, type DepartmentResult } from "../types";
 import {
-  assignUserDepartment, createDepartment, getMyDepartment, listDepartments,
+  assignUserDepartment, createDepartment, deleteDepartment, getMyDepartment, listDepartments,
   listUsersByDepartment, publicActiveDepartments, setDepartmentStatus, updateDepartment,
 } from "../services/department-service";
 
@@ -18,7 +18,14 @@ async function run<T>(work: () => Promise<T>): Promise<DepartmentResult<T>> {
   catch (error) {
     if (error instanceof z.ZodError) return { success: false, code: "INVALID_INPUT", error: "Check the submitted fields.", fieldErrors: error.flatten().fieldErrors as Record<string, string[]> };
     if (error instanceof DepartmentError) return { success: false, code: error.code, error: error.message };
-    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") return { success: false, code: "DEPARTMENT_CONFLICT", error: "A department with that name or code already exists." };
+    if (error instanceof Prisma.PrismaClientKnownRequestError) {
+      if (error.code === "P2003") return { success: false, code: "IN_USE", error: "Department has linked records." };
+      if (error.code === "P2025") return { success: false, code: "NOT_FOUND", error: "Department not found." };
+      if (error.code === "P2002") {
+        const target = String(error.meta?.target ?? error.meta?.constraint ?? "");
+        return { success: false, code: target.includes("code") ? "DUPLICATE_CODE" : "DUPLICATE_NAME", error: "A department with that name or code already exists." };
+      }
+    }
     console.error("Department operation failed:", error);
     return { success: false, code: "DATABASE_ERROR", error: "Unable to complete the department operation." };
   }
@@ -28,6 +35,8 @@ function refresh() {
   revalidatePath("/administration");
   revalidatePath("/signup");
   revalidatePath("/reservations");
+  revalidatePath("/resources");
+  revalidatePath("/dashboard");
 }
 
 export async function listSignupDepartmentsAction() {
@@ -50,6 +59,9 @@ export async function updateDepartmentAction(id: unknown, input: unknown) {
 }
 export async function setDepartmentStatusAction(input: unknown) {
   return run(async () => { const parsed = setDepartmentStatusSchema.parse(input); const item = await setDepartmentStatus(parsed.id, parsed.isActive); refresh(); return item; });
+}
+export async function deleteDepartmentAction(id: unknown) {
+  return run(async () => { const item = await deleteDepartment(deleteDepartmentSchema.parse(id)); refresh(); return item; });
 }
 export async function assignUserDepartmentAction(input: unknown) {
   return run(async () => { const parsed = assignUserDepartmentSchema.parse(input); const item = await assignUserDepartment(parsed.userId, parsed.departmentId); refresh(); return item; });

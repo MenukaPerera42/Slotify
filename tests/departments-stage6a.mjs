@@ -75,7 +75,7 @@ try {
   const created = success(await action("createDepartmentAction", [{ name: `Stage6A managed ${tag}`, code: `M${tag.toUpperCase()}` }], admin));
   departments.push(created.id);
   assert.equal(success(await action("updateDepartmentAction", [created.id, { description: "Updated" }], admin)).description, "Updated");
-  failure(await action("createDepartmentAction", [{ name: created.name, code: `X${tag.toUpperCase()}` }], admin), "DEPARTMENT_CONFLICT");
+  failure(await action("createDepartmentAction", [{ name: created.name, code: `X${tag.toUpperCase()}` }], admin), "DUPLICATE_NAME");
   assert.ok(success(await action("listDepartmentsAction", [{ search: tag }], admin)).items.some((item) => item.id === created.id));
   success(await action("setDepartmentStatusAction", [{ id: created.id, isActive: false }], admin));
   failure(await action("assignUserDepartmentAction", [{ userId: users[1], departmentId: created.id }], admin), "DEPARTMENT_INACTIVE");

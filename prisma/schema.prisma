@@ -137,7 +137,9 @@ model ResourceCategory {
   id          String     @id @default(uuid()) @db.Uuid
   name        String     @unique
   description String?
+  isActive    Boolean    @default(true)
   createdAt   DateTime   @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime   @updatedAt @db.Timestamptz(3)
   resources   Resource[]
 
   @@map("resource_categories")
