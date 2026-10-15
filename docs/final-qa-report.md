@@ -1,7 +1,59 @@
-# Slotify production readiness audit — Stage 8A
+# Slotify production readiness audit — Stage 8A and 8A.1
 
 **Date:** 2026-10-15  
-**Decision: NOT READY for deployment.** Local application checks largely pass, but a read-only schema diff found local drift, the Neon/Vercel environment has not been validated, and two legacy suites cannot pass against the current shared local database. Do not treat this report as a production smoke test.
+**Current decision: READY FOR NEON STAGING; NOT READY FOR PRODUCTION DEPLOYMENT.** Stage 8A.1 resolved the local test isolation and schema reconciliation blockers. Neon and Vercel have not been exercised. The Stage 8A baseline below is retained as a historical record of its original findings and exit codes.
+
+## Stage 8A.1 blocker resolution — 2026-10-15
+
+| Original blocker | Root cause and resolution | Verification |
+| --- | --- | --- |
+| Stage 6B.1 depended on demo login and seeded dates | Replaced fixed credentials and existing bookings with a generated administrator/password, department, booked and unbooked resources, and two adjacent reservations. All records are tracked by IDs and removed in dependency order. | `test:stage6b1` exit 0 on the configured local database. Original demo accounts and bookings were not used. |
+| Office-shift test stopped with a real active shift | The suite required zero active shifts and previously targeted the shared `DATABASE_URL`. It now requires a unique disposable database name and comment marker, and checks both direct Prisma and test-server database identities before mutations. A runner creates, migrates, verifies, tests, and drops only its marked database. | `test:office-shifts:isolated` exit 0. Direct `test:office-shifts` against the main database exits 1 before mutations. The real active shift was not changed. |
+| Prisma diff reported five differences | The two email-challenge foreign keys and two indexes were created under explicit legacy names. Prisma inferred other names. Explicit `map` attributes now model the actual names. `resource_categories.updatedAt` has a `DEFAULT CURRENT_TIMESTAMP` from Stage 7D.1; Prisma `@updatedAt` handles ORM writes, while the database default permits raw inserts. Added `@default(now())` alongside `@updatedAt`. No SQL behavior changed. | Main and fresh migrated database diffs both exit 0, “No difference detected.” No migration was created or historical migration changed. |
+
+### Disposable database method
+
+Run `npm run build` then `npm run test:office-shifts:isolated` on the local PostgreSQL host. The runner accepts only a loopback PostgreSQL source URL, creates a random `slotify_stage8a1_*` database, writes a random database comment, and verifies that the test server and Prisma client both use that database. It applies all migrations, compares the resulting schema to the Prisma model, checks `btree_gist`, the booking exclusion constraint, foreign keys, indexes, and four application triggers, and seeds standard departments and a disposable anchor admin. The anchor satisfies the database's last-active-admin protection during test cleanup. In `finally`, it drops only a database whose name and comment still match its generated values. If identity cannot be proven, it aborts. Never run shift mutations directly against the main database. For the two signup suites, use `SLOTIFY_ISOLATED_SUITES=stage7c4a` or `SLOTIFY_ISOLATED_SUITES=admin-taxonomy` before the runner command. These use separate fresh databases to avoid shared signup-rate-limit state. The original PostgreSQL database was never reset.
+
+### Schema and database findings
+
+The 13 historical migrations apply cleanly to a fresh disposable database; `prisma migrate status` exits 0 there and on the main database. The fresh catalog contains `btree_gist`, the `reservations_no_overlap_blocking_excl` GiST constraint, 18 foreign keys, 47 indexes, and four application triggers. The suite exercised half-open adjacency, cross-department concurrent conflict rejection, overnight/24-hour windows, rejection leaving history without blocking, and rejection of an invalid reverse status transition. Prisma Client worked against this fresh migration history. The four naming differences were category **A (naming only)**. The `updatedAt` default was category **B (functionally meaningful raw-insert fallback, consistent with ORM-managed updates)**. No category C migration defect was found. Custom exclusion constraints and triggers were checked separately because Prisma's schema diff does not represent them. No generated diff SQL was executed.
+
+### Actual Stage 8A.1 results
+
+| Check | Exit | Target / result |
+| --- | ---: | --- |
+| `npx prisma validate` | 0 | Valid schema |
+| `npx prisma migrate status` | 0 | Main local DB: 13 applied, none pending |
+| `npx prisma migrate diff --from-schema-datasource prisma/schema.prisma --to-schema-datamodel prisma/schema.prisma --exit-code` | 0 | Main local DB: no difference |
+| `npm run typecheck` | 0 | Final source |
+| `npm run lint` | 0 | Final source |
+| `npm run build` | 0 | Final source; Prisma Client generated |
+| `npm run test:auth` | 0 | Configured local DB |
+| `npm run test:reservations` | 0 | Configured local DB with active shift |
+| `npm run test:notifications` | 0 | Configured local DB |
+| `npm run test:departments` | 0 | Configured local DB |
+| `npm run test:reservation-time-edit` | 0 | Configured local DB |
+| `npm run test:timeline-range` | 0 | Pure calculation suite |
+| `npm run test:timeline-interactions` | 0 | Pure interaction suite |
+| `npm run test:stage6b` | 0 | Configured local DB |
+| `npm run test:dashboard` | 0 | Configured local DB |
+| `npm run test:admin-management` | 0 | Configured local DB |
+| `npm run test:stage6b1` | 0 | Isolated records on configured local DB |
+| `SLOTIFY_ISOLATED_SUITES=stage6b1 npm run test:office-shifts:isolated` | 0 | Same fixture suite on a fresh migrated disposable DB; removed afterward |
+| `npm run test:office-shifts:isolated` | 0 | Newly migrated, marked disposable DB; removed afterward |
+| `SLOTIFY_ISOLATED_SUITES=stage7c4a npm run test:office-shifts:isolated` | 0 | Separate fresh disposable DB; removed afterward |
+| `SLOTIFY_ISOLATED_SUITES=admin-taxonomy npm run test:office-shifts:isolated` | 0 | Separate fresh disposable DB; removed afterward |
+
+`test:stage7c4a` and `test:admin-taxonomy` first exited 1 when run sequentially on the shared main database after the auth suite: the signup action returned `RATE_LIMITED` before intended validation assertions. Their fresh-database reruns passed. An exploratory `test:reservations` on a fresh database exited 1 because that legacy suite assumes an active shift; its configured-database run passed. The disposable office suite separately verified status transitions and booking concurrency. These failed exploratory runs are not counted as passes.
+
+### Production configuration and remaining gate
+
+`package.json` runs `prisma generate` before the Next.js production build and provides `db:deploy` for controlled migrations. The application uses `DATABASE_URL` for Prisma and requires `AUTH_SECRET`; `AUTH_URL` is deployment-dependent. The test route is disabled unless the local test flag is set on a loopback host and remains disabled on Vercel. The new read-only database identity endpoint has the same guard. Do not set `SLOTIFY_RESERVATION_TEST_MODE` or demo credentials in Vercel. `.env` and build artifacts remain ignored. No production secret was generated or printed. The single `DATABASE_URL` design still requires a deliberate direct connection for migrations and a serverless-compatible pooled connection for Vercel runtime. This exact Neon/Vercel combination, HTTPS cookie behavior, and preview smoke tests are unverified.
+
+**Stage 8A.1 decision: READY FOR NEON STAGING.** Provision a separate Neon branch or database, confirm extension privileges, apply migrations with a direct connection, inspect constraints/triggers and schema diff, configure pooled runtime access and authentication variables, then run a Vercel preview smoke and concurrency check. This is not approval for production deployment. No deploy, commit, or push occurred.
+
+## Stage 8A baseline (historical findings)
 
 ## Feature completion matrix
 
@@ -93,4 +145,4 @@ Do not configure the local test/demo variables `SLOTIFY_RESERVATION_TEST_MODE`, 
 - `src/app/api/reservation-test/route.ts`: fail closed on Vercel and non-loopback hosts.
 - This report.
 
-**Release decision: NOT READY.** The local implementation is substantially verified, but schema drift, two environment-dependent suites, and the untested Neon/Vercel deployment path remain open release gates.
+**Stage 8A baseline decision (superseded above): NOT READY.** The local implementation is substantially verified, but schema drift, two environment-dependent suites, and the untested Neon/Vercel deployment path remain open release gates.

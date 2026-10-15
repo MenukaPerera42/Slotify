@@ -11,6 +11,22 @@ const created = { users: [], departments: [], categories: [], resources: [], res
 const cookieHeader = (jar) => Object.entries(jar).map(([key, value]) => `${key}=${value}`).join("; ");
 const cookies = (response) => Object.fromEntries(response.headers.getSetCookie().map((line) => line.split(";", 1)[0].split(/=(.*)/s).slice(0, 2)));
 const pass = (message) => console.log(`PASS ${message}`);
+async function verifyDisposableDatabase() {
+  const expectedDatabase = process.env.SLOTIFY_DISPOSABLE_DB_NAME;
+  const expectedMarker = process.env.SLOTIFY_DISPOSABLE_DB_MARKER;
+  assert.match(expectedDatabase ?? "", /^slotify_stage8a1_[a-f0-9]{12}$/,
+    "Office-shift mutations require the disposable database runner");
+  assert.match(expectedMarker ?? "", /^slotify-stage8a1:[a-f0-9]{32}$/);
+  const rows = await prisma.$queryRaw`
+    SELECT current_database() AS database, shobj_description(oid, 'pg_database') AS marker
+    FROM pg_database WHERE datname = current_database()`;
+  assert.equal(rows[0]?.database, expectedDatabase, "Prisma is not connected to the disposable database");
+  assert.equal(rows[0]?.marker, expectedMarker, "Disposable database marker mismatch");
+  const response = await fetch(`${base}/api/reservation-test`);
+  assert.equal(response.status, 200, "Test server database identity endpoint unavailable");
+  assert.deepEqual(await response.json(), rows[0], "Test server uses a different database");
+  pass("direct Prisma and test server targets match the marked disposable database");
+}
 function ok(result, label) {
   assert.equal(result.success, true, `${label}: ${JSON.stringify(result)}`);
   return result.data;
@@ -61,6 +77,7 @@ async function activate(adminJar, shiftId) {
   }], adminJar), "activate");
 }
 
+await verifyDisposableDatabase();
 try {
   const baseline = {
     users: await prisma.user.count(), departments: await prisma.department.count(),
@@ -245,18 +262,20 @@ try {
   assert.equal(await prisma.department.count(), baseline.departments + 2);
   assert.equal(await prisma.reservation.count(), baseline.reservations + created.reservations.length);
   pass("only isolated records were added; existing reservation history remains intact");
+  const transitionSlot = {
+    resourceId: resource.id, userId: member.id, createdByUserId: admin.id, departmentId: deptA.id,
+    title: `Transition ${tag}`, startTime: new Date(`${fullDate}T04:00:00+05:30`),
+    endTime: new Date(`${fullDate}T04:30:00+05:30`),
+  };
+  const rejected = await prisma.reservation.create({ data: { ...transitionSlot, status: "PENDING" } });
+  await prisma.reservation.update({ where: { id: rejected.id }, data: { status: "REJECTED" } });
+  const approvedAfterRejection = await prisma.reservation.create({ data: { ...transitionSlot, status: "APPROVED" } });
+  await assert.rejects(prisma.reservation.update({ where: { id: approvedAfterRejection.id }, data: { status: "PENDING" } }));
+  assert.equal((await prisma.reservation.findUniqueOrThrow({ where: { id: approvedAfterRejection.id } })).status, "APPROVED");
+  pass("database status trigger rejects reverse transition; rejected history does not block the slot");
 } finally {
-  await prisma.notification.deleteMany({ where: { OR: [
-    { reservationId: { in: created.reservations } },
-    { recipientUserId: { in: created.users } },
-    { actorUserId: { in: created.users } },
-  ] } });
-  await prisma.reservationDepartmentCorrection.deleteMany({ where: { reservationId: { in: created.reservations } } });
-  await prisma.reservation.deleteMany({ where: { id: { in: created.reservations } } });
-  await prisma.officeShift.deleteMany({ where: { id: { in: created.shifts } } });
-  await prisma.resource.deleteMany({ where: { id: { in: created.resources } } });
-  await prisma.user.deleteMany({ where: { id: { in: created.users } } });
-  await prisma.resourceCategory.deleteMany({ where: { id: { in: created.categories } } });
-  await prisma.department.deleteMany({ where: { id: { in: created.departments } } });
+  // This suite is restricted to a freshly marked database. The runner drops the
+  // entire database after the test; record-level deletion would violate the
+  // "last active admin" trigger and is unnecessary for disposable data.
   await prisma.$disconnect();
 }

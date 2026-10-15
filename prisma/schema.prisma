@@ -83,11 +83,11 @@ model EmailVerificationChallenge {
   consumedAt        DateTime?             @db.Timestamptz(3)
   createdAt         DateTime              @default(now()) @db.Timestamptz(3)
   updatedAt         DateTime              @updatedAt @db.Timestamptz(3)
-  user              User                  @relation("EmailChallengeSubject", fields: [userId], references: [id], onDelete: Cascade)
-  initiatedBy       User?                 @relation("EmailChallengeInitiator", fields: [initiatedByUserId], references: [id], onDelete: SetNull)
+  user              User                  @relation("EmailChallengeSubject", fields: [userId], references: [id], onDelete: Cascade, map: "email_challenges_user_fkey")
+  initiatedBy       User?                 @relation("EmailChallengeInitiator", fields: [initiatedByUserId], references: [id], onDelete: SetNull, map: "email_challenges_initiator_fkey")
 
-  @@index([userId, purpose, createdAt])
-  @@index([targetEmail])
+  @@index([userId, purpose, createdAt], map: "email_challenges_user_purpose_created_idx")
+  @@index([targetEmail], map: "email_challenges_targetEmail_idx")
   @@map("email_verification_challenges")
 }
 
@@ -140,7 +140,7 @@ model ResourceCategory {
   description String?
   isActive    Boolean    @default(true)
   createdAt   DateTime   @default(now()) @db.Timestamptz(3)
-  updatedAt   DateTime   @updatedAt @db.Timestamptz(3)
+  updatedAt   DateTime   @default(now()) @updatedAt @db.Timestamptz(3)
   resources   Resource[]
 
   @@map("resource_categories")

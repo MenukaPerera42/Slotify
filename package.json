@@ -29,7 +29,8 @@
     "db:setup-demo": "node --import tsx prisma/setup-demo-credentials.ts",
     "db:reset-demo-password": "node --env-file=.env --import tsx prisma/reset-demo-password.ts",
     "db:migrate": "prisma migrate dev",
-    "db:deploy": "prisma migrate deploy"
+    "db:deploy": "prisma migrate deploy",
+    "test:office-shifts:isolated": "node --env-file=.env scripts/run-isolated-office-shifts.mjs"
   },
   "dependencies": {
     "@prisma/client": "^6.4.1",
