@@ -14,6 +14,7 @@ const base = process.env.SLOTIFY_TEST_URL ?? "http://localhost:3000";
 const stamp = `${Date.now()}-${randomBytes(4).toString("hex")}`;
 const memberEmail = `stage41-${stamp}@example.test`;
 const raceEmail = `stage41-race-${stamp}@example.test`;
+const adminEmail = `stage41-admin-${stamp}@example.test`;
 const password = `Strong-${randomBytes(18).toString("base64url")}`;
 const rateAddressBytes = randomBytes(2);
 const signupRateAddress = `198.18.${rateAddressBytes[0]}.${rateAddressBytes[1]}`;
@@ -25,7 +26,7 @@ function isolatedAddress(address) {
   return address;
 }
 const prisma = new PrismaClient();
-const testEmails = [memberEmail, raceEmail];
+const testEmails = [memberEmail, raceEmail, adminEmail];
 
 function cookies(response) {
   return Object.fromEntries(response.headers.getSetCookie().map((line) => line.split(";", 1)[0].split(/=(.*)/s).slice(0, 2)));
@@ -147,7 +148,7 @@ try {
   assert.equal((await page("/administration", member.jar)).status, 404);
   assert.equal((await page("/dashboard")).status, 307);
   const deniedAction = await action(resourceId, [{}], "/resources", "192.0.2.108", member.jar);
-  assert.match(deniedAction.text, /Forbidden/);
+  assert.match(deniedAction.text, /"code":"FORBIDDEN"/);
   pass("new member login, protected routes, admin denial");
 
   await prisma.user.update({ where: { email: memberEmail }, data: { role: "ADMIN" } });
@@ -159,16 +160,14 @@ try {
   await prisma.user.update({ where: { email: memberEmail }, data: { isActive: true } });
   pass("role changes and deactivation take effect on the next request");
 
-  // Old admin email no longer authenticates
-  const oldAdmin = await login("alex.admin@primewave.local", process.env.SLOTIFY_DEMO_ADMIN_PASSWORD, "192.0.2.110");
-  assert.notEqual(oldAdmin.response.headers.get("location") ?? "", `${base}/dashboard`);
-  assert.match(oldAdmin.response.headers.get("location") ?? "", /error=CredentialsSignin/);
-
-  // Updated admin email authenticates and has ADMIN role
-  const admin = await login("adminslotify@gmail.com", process.env.SLOTIFY_DEMO_ADMIN_PASSWORD, "192.0.2.109");
+  // Use an isolated administrator instead of depending on demo credentials.
+  const adminSignup = await signup({ ...fields, email: adminEmail }, "192.0.2.110");
+  assert.match(adminSignup.response.headers.get("x-action-redirect") ?? adminSignup.response.headers.get("location") ?? "", /\/login\?created=1/);
+  await prisma.user.update({ where: { email: adminEmail }, data: { role: "ADMIN" } });
+  const admin = await login(adminEmail, password, "192.0.2.109");
   assert.equal(admin.response.status, 302);
   assert.equal((await page("/administration", admin.jar)).status, 200);
-  pass("updated admin login (adminslotify@gmail.com) succeeds and old admin is rejected");
+  pass("isolated administrator login and protected route access");
 
   const csrfResponse = await fetch(`${base}/api/auth/csrf`, { headers: { Cookie: cookieHeader(member.jar) } });
   Object.assign(member.jar, cookies(csrfResponse));

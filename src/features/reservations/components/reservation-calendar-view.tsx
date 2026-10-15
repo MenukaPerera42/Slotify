@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import {
   ChevronLeft,
@@ -11,12 +11,8 @@ import { Button } from "@/components/ui/button";
 import { getGroupedReservationsForDateAction } from "../actions/reservation-actions";
 import { getEffectiveSchedulingHoursAction } from "@/features/office-shifts/actions/office-shift-actions";
 import type { EffectiveSchedule } from "@/features/office-shifts/types/effective-schedule";
+import { minuteToTimeStr } from "@/features/office-shifts/utils/shift-client-utils";
 import {
-  generateBookingEndOptions,
-  minuteToTimeStr,
-} from "@/features/office-shifts/utils/shift-client-utils";
-import {
-  BUSINESS_TIME_SLOTS,
   formatColomboFullDate,
   getColomboTodayString,
   getColomboDateRange,
@@ -29,6 +25,7 @@ import {
 } from "@/features/resources/components/timeline-grid";
 import { ReservationFormModal, type ResourceOption } from "./reservation-form-modal";
 import { DEPARTMENT_PALETTES, UNASSIGNED_PALETTE } from "@/features/departments/utils/department-colors";
+import { applyConfirmedTime, type ConfirmedReservationTime } from "@/features/resources/utils/timeline-interactions";
 
 interface ReservationCalendarViewProps {
   resources: ResourceOption[];
@@ -52,10 +49,13 @@ export function ReservationCalendarView({
   const [selectedDate, setSelectedDate] = useState(
     initialDate || getColomboTodayString()
   );
+  const selectedDateRef = useRef(selectedDate);
+  const requestVersion = useRef(0);
   const [selectedCategory, setSelectedCategory] = useState<string>("ALL");
   const [occupancy, setOccupancy] = useState<ReservationOccupancy[]>([]);
   const [effectiveSchedule, setEffectiveSchedule] = useState<EffectiveSchedule | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const displayedSchedule = effectiveSchedule?.operationalDate === selectedDate ? effectiveSchedule : null;
 
   // Quick booking modal state
   const [bookingModalState, setBookingModalState] = useState<{
@@ -76,12 +76,14 @@ export function ReservationCalendarView({
 
   // Fetch real grouped reservations and effective office shift schedule for the selected date
   const fetchDateReservations = useCallback((dateStr: string) => {
+    const version = ++requestVersion.current;
     setIsLoading(true);
     Promise.all([
       getGroupedReservationsForDateAction({ date: dateStr }),
       getEffectiveSchedulingHoursAction({ date: dateStr }),
     ])
       .then(([occResult, shiftResult]) => {
+        if (version !== requestVersion.current || dateStr !== selectedDateRef.current) return;
         if (occResult.success) {
           setOccupancy(occResult.data as ReservationOccupancy[]);
         }
@@ -93,19 +95,20 @@ export function ReservationCalendarView({
         console.error("Failed to fetch grouped reservations or shifts for date:", err);
       })
       .finally(() => {
-        setIsLoading(false);
+        if (version === requestVersion.current) setIsLoading(false);
       });
   }, []);
 
   // Fetch when selectedDate changes (with race-condition protection)
   useEffect(() => {
     let isCurrent = true;
+    const version = ++requestVersion.current;
     Promise.all([
       getGroupedReservationsForDateAction({ date: selectedDate }),
       getEffectiveSchedulingHoursAction({ date: selectedDate }),
     ])
       .then(([occResult, shiftResult]) => {
-        if (!isCurrent) return;
+        if (!isCurrent || version !== requestVersion.current || selectedDate !== selectedDateRef.current) return;
         if (occResult.success) {
           setOccupancy(occResult.data as ReservationOccupancy[]);
         }
@@ -115,12 +118,33 @@ export function ReservationCalendarView({
       })
       .catch((err) => {
         console.error("Failed to fetch grouped reservations or shifts for date:", err);
+      }).finally(() => {
+        if (isCurrent && version === requestVersion.current) setIsLoading(false);
       });
 
     return () => {
       isCurrent = false;
     };
   }, [selectedDate]);
+
+  const handleTimeSaved = (confirmed: ConfirmedReservationTime) => {
+    ++requestVersion.current;
+    setOccupancy((current) => applyConfirmedTime(current, confirmed));
+    setEffectiveSchedule((current) => current ? {
+      ...current,
+      occupancy: applyConfirmedTime(current.occupancy, confirmed),
+      outsideWindowOccupancy: applyConfirmedTime(current.outsideWindowOccupancy, confirmed),
+    } : current);
+    fetchDateReservations(selectedDateRef.current);
+    onRefreshSummary?.();
+  };
+
+  const selectDate = (date: string) => {
+    selectedDateRef.current = date;
+    ++requestVersion.current;
+    setIsLoading(true);
+    setSelectedDate(date);
+  };
 
   // Periodic visibility polling (every 25 seconds) + focus sync
   useEffect(() => {
@@ -160,7 +184,7 @@ export function ReservationCalendarView({
 
   const handlePrevDay = () => {
     const prev = shiftColomboDate(selectedDate, -1);
-    setSelectedDate(prev);
+    selectDate(prev);
     if (prev < rangeStart) {
       setRangeStart((curr) => shiftColomboDate(curr, -1));
     }
@@ -168,7 +192,7 @@ export function ReservationCalendarView({
 
   const handleNextDay = () => {
     const next = shiftColomboDate(selectedDate, 1);
-    setSelectedDate(next);
+    selectDate(next);
     if (next > rangeEnd) {
       setRangeStart((curr) => shiftColomboDate(curr, 1));
     }
@@ -176,40 +200,17 @@ export function ReservationCalendarView({
 
   const handleToday = () => {
     const today = getColomboTodayString();
-    setSelectedDate(today);
+    selectDate(today);
   };
 
   const dateStripItems = getColomboDateRange(rangeStart, VISIBLE_COUNT);
 
-  // Handle slot click from timeline
-  const handleSelectSlot = (resId: string, slotTime: string) => {
-    let endSlot = "18:00";
-    if (effectiveSchedule) {
-      const endOpts = generateBookingEndOptions(
-        slotTime,
-        effectiveSchedule.startMinute,
-        effectiveSchedule.durationMinutes
-      );
-      if (endOpts.length > 1) {
-        endSlot = endOpts[1].timeStr;
-      } else if (endOpts.length > 0) {
-        endSlot = endOpts[0].timeStr;
-      }
-    } else {
-      const sIdx = BUSINESS_TIME_SLOTS.indexOf(slotTime);
-      endSlot =
-        sIdx !== -1 && sIdx + 2 < BUSINESS_TIME_SLOTS.length
-          ? BUSINESS_TIME_SLOTS[sIdx + 2]
-          : sIdx !== -1 && sIdx + 1 < BUSINESS_TIME_SLOTS.length
-          ? BUSINESS_TIME_SLOTS[sIdx + 1]
-          : "18:00";
-    }
-
+  const handleSelectRange = (resId: string, startTime: string, endTime: string) => {
     setBookingModalState({
       isOpen: true,
       resourceId: resId,
-      startTime: slotTime,
-      endTime: endSlot,
+      startTime,
+      endTime,
     });
   };
 
@@ -319,7 +320,7 @@ export function ReservationCalendarView({
                 <button
                   key={item.dateStr}
                   type="button"
-                  onClick={() => setSelectedDate(item.dateStr)}
+                  onClick={() => selectDate(item.dateStr)}
                   className={`flex flex-col items-center justify-center w-14 py-2 rounded-xl transition-all border ${
                     isSelected
                       ? "bg-blue-50 border-blue-300 text-blue-700 shadow-2xs ring-1 ring-blue-300"
@@ -356,7 +357,7 @@ export function ReservationCalendarView({
         <div className="flex items-center gap-4 flex-wrap">
           <span className="flex items-center gap-1.5">
             <span className="h-3 w-3 rounded-md bg-white border border-slate-200 shadow-2xs" />
-            <span className="text-[11px]">Available Slot (Click to book)</span>
+            <span className="text-[11px]">Free range (select first and last slot)</span>
           </span>
           <span className="flex items-center gap-1.5">
             <span className="h-2.5 w-2.5 rounded-full bg-amber-500 ring-2 ring-amber-300" />
@@ -395,12 +396,12 @@ export function ReservationCalendarView({
       <TimelineGrid
         resources={filteredResources}
         selectedDate={selectedDate}
-        occupancy={occupancy}
-        effectiveSchedule={effectiveSchedule}
+        occupancy={displayedSchedule ? occupancy : []}
+        effectiveSchedule={displayedSchedule}
         departments={departments}
         isAdmin={isAdmin}
-        isLoading={isLoading}
-        onSelectSlot={handleSelectSlot}
+        isLoading={isLoading && !displayedSchedule}
+        onSelectRange={handleSelectRange}
         onNewReservation={() =>
           setBookingModalState({
             isOpen: true,
@@ -412,6 +413,8 @@ export function ReservationCalendarView({
           })
         }
         onBrowseResources={() => router.push("/resources")}
+        onRefresh={() => fetchDateReservations(selectedDateRef.current)}
+        onReservationTimeSaved={handleTimeSaved}
       />
 
       {/* Quick Booking Modal */}

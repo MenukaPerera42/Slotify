@@ -359,8 +359,6 @@ export function ReservationFormModal({
       }
     }
 
-    const startISO = createColomboISO(date, startTime);
-
     startTransition(async () => {
       let result;
       if (!isAdmin || adminMode === "self") {

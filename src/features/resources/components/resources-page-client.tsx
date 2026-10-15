@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Layers } from "lucide-react";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -15,14 +15,13 @@ import { getGroupedReservationsForDateAction } from "@/features/reservations/act
 import { getEffectiveSchedulingHoursAction } from "@/features/office-shifts/actions/office-shift-actions";
 import type { EffectiveSchedule } from "@/features/office-shifts/types/effective-schedule";
 import {
-  generateBookingEndOptions,
   minuteToTimeStr,
 } from "@/features/office-shifts/utils/shift-client-utils";
 import {
   getColomboTodayString,
-  BUSINESS_TIME_SLOTS,
 } from "@/features/reservations/utils/client-date";
 import type { ResourceItem } from "./resource-card";
+import { applyConfirmedTime, type ConfirmedReservationTime } from "../utils/timeline-interactions";
 
 interface ResourcesPageClientProps {
   user: {
@@ -53,10 +52,13 @@ export function ResourcesPageClient({
 
   // State
   const [selectedDate, setSelectedDate] = useState<string>(getColomboTodayString());
+  const selectedDateRef = useRef(selectedDate);
+  const requestVersion = useRef(0);
   const [occupancy, setOccupancy] = useState<ReservationOccupancy[]>([]);
   const [effectiveSchedule, setEffectiveSchedule] = useState<EffectiveSchedule | null>(null);
   const [isLoadingOccupancy, setIsLoadingOccupancy] = useState<boolean>(false);
   const [activeView, setActiveView] = useState<"calendar" | "map">("calendar");
+  const displayedSchedule = effectiveSchedule?.operationalDate === selectedDate ? effectiveSchedule : null;
 
   // Booking Modal State
   const bookResourceIdParam = searchParams.get("bookResourceId");
@@ -72,12 +74,14 @@ export function ResourcesPageClient({
 
   // Fetch real grouped occupancy and effective office shift schedule for the selected date
   const fetchOccupancy = useCallback((dateStr: string) => {
+    const version = ++requestVersion.current;
     setIsLoadingOccupancy(true);
     Promise.all([
       getGroupedReservationsForDateAction({ date: dateStr }),
       getEffectiveSchedulingHoursAction({ date: dateStr }),
     ])
       .then(([occRes, shiftRes]) => {
+        if (version !== requestVersion.current || dateStr !== selectedDateRef.current) return;
         if (occRes.success) {
           setOccupancy(occRes.data as ReservationOccupancy[]);
         }
@@ -89,19 +93,20 @@ export function ResourcesPageClient({
         console.error("Failed to fetch occupancy or shifts for date:", err);
       })
       .finally(() => {
-        setIsLoadingOccupancy(false);
+        if (version === requestVersion.current) setIsLoadingOccupancy(false);
       });
   }, []);
 
   // Fetch when selectedDate changes
   useEffect(() => {
     let isCurrent = true;
+    const version = ++requestVersion.current;
     Promise.all([
       getGroupedReservationsForDateAction({ date: selectedDate }),
       getEffectiveSchedulingHoursAction({ date: selectedDate }),
     ])
       .then(([occRes, shiftRes]) => {
-        if (!isCurrent) return;
+        if (!isCurrent || version !== requestVersion.current || selectedDate !== selectedDateRef.current) return;
         if (occRes.success) {
           setOccupancy(occRes.data as ReservationOccupancy[]);
         }
@@ -111,12 +116,25 @@ export function ResourcesPageClient({
       })
       .catch((err) => {
         console.error("Failed to fetch occupancy or shifts for date:", err);
+      }).finally(() => {
+        if (isCurrent && version === requestVersion.current) setIsLoadingOccupancy(false);
       });
 
     return () => {
       isCurrent = false;
     };
   }, [selectedDate]);
+
+  const handleTimeSaved = (confirmed: ConfirmedReservationTime) => {
+    ++requestVersion.current;
+    setOccupancy((current) => applyConfirmedTime(current, confirmed));
+    setEffectiveSchedule((current) => current ? {
+      ...current,
+      occupancy: applyConfirmedTime(current.occupancy, confirmed),
+      outsideWindowOccupancy: applyConfirmedTime(current.outsideWindowOccupancy, confirmed),
+    } : current);
+    fetchOccupancy(selectedDateRef.current);
+  };
 
   // Periodic visibility polling (every 25s) + tab focus revalidation
   useEffect(() => {
@@ -139,35 +157,12 @@ export function ResourcesPageClient({
     };
   }, [selectedDate, fetchOccupancy]);
 
-  // Handle slot click from timeline
-  const handleSelectSlot = (resId: string, slotTime: string) => {
-    let endSlot = "18:00";
-    if (effectiveSchedule) {
-      const endOpts = generateBookingEndOptions(
-        slotTime,
-        effectiveSchedule.startMinute,
-        effectiveSchedule.durationMinutes
-      );
-      if (endOpts.length > 1) {
-        endSlot = endOpts[1].timeStr;
-      } else if (endOpts.length > 0) {
-        endSlot = endOpts[0].timeStr;
-      }
-    } else {
-      const sIdx = BUSINESS_TIME_SLOTS.indexOf(slotTime);
-      endSlot =
-        sIdx !== -1 && sIdx + 2 < BUSINESS_TIME_SLOTS.length
-          ? BUSINESS_TIME_SLOTS[sIdx + 2]
-          : sIdx !== -1 && sIdx + 1 < BUSINESS_TIME_SLOTS.length
-          ? BUSINESS_TIME_SLOTS[sIdx + 1]
-          : "18:00";
-    }
-
+  const handleSelectRange = (resId: string, startTime: string, endTime: string) => {
     setBookingModalState({
       isOpen: true,
       resourceId: resId,
-      startTime: slotTime,
-      endTime: endSlot,
+      startTime,
+      endTime,
     });
   };
 
@@ -183,7 +178,7 @@ export function ResourcesPageClient({
 
   // Check if a resource has any bookings on the selected date
   const resourceHasBookings = (resId: string) => {
-    return occupancy.some((o) => o.resourceId === resId);
+    return Boolean(displayedSchedule) && occupancy.some((o) => o.resourceId === resId);
   };
 
   return (
@@ -197,7 +192,12 @@ export function ResourcesPageClient({
           selectedStatus={selectedStatus}
           searchQuery={searchQuery}
           selectedDate={selectedDate}
-          onSelectDate={(newDate) => setSelectedDate(newDate)}
+          onSelectDate={(newDate) => {
+            selectedDateRef.current = newDate;
+            ++requestVersion.current;
+            setIsLoadingOccupancy(true);
+            setSelectedDate(newDate);
+          }}
           activeView={activeView}
           onViewChange={(view) => setActiveView(view)}
         />
@@ -208,12 +208,12 @@ export function ResourcesPageClient({
             <TimelineGrid
               resources={resources}
               selectedDate={selectedDate}
-              occupancy={occupancy}
-              effectiveSchedule={effectiveSchedule}
+              occupancy={displayedSchedule ? occupancy : []}
+              effectiveSchedule={displayedSchedule}
               departments={departments}
               isAdmin={user.role === "ADMIN"}
-              isLoading={isLoadingOccupancy}
-              onSelectSlot={handleSelectSlot}
+              isLoading={isLoadingOccupancy && !displayedSchedule}
+              onSelectRange={handleSelectRange}
               onNewReservation={() =>
                 setBookingModalState({
                   isOpen: true,
@@ -230,6 +230,7 @@ export function ResourcesPageClient({
                   ?.scrollIntoView({ behavior: "smooth" });
               }}
               onRefresh={() => fetchOccupancy(selectedDate)}
+              onReservationTimeSaved={handleTimeSaved}
             />
           </div>
         )}

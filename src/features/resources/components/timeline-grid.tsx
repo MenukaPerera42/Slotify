@@ -44,6 +44,9 @@ import {
   formatShiftHours,
 } from "@/features/office-shifts/utils/shift-client-utils";
 import type { EffectiveSchedule } from "@/features/office-shifts/types/effective-schedule";
+import { minuteToTimeStr } from "@/features/office-shifts/utils/shift-client-utils";
+import { selectFreeTimelineRange } from "../utils/timeline-range";
+import { applyConfirmedTime, bookedTimelineResources, dragOverlapsBooking, proposeTimelineDrag, type ConfirmedReservationTime, type DragMode } from "../utils/timeline-interactions";
 
 export interface ReservationOccupancy {
   id?: string;
@@ -92,10 +95,11 @@ export interface TimelineGridProps {
   effectiveSchedule?: EffectiveSchedule | null;
   departments?: DepartmentOption[];
   isAdmin?: boolean;
-  onSelectSlot?: (resourceId: string, slotTime: string) => void;
+  onSelectRange?: (resourceId: string, startTime: string, endTime: string) => void;
   onNewReservation?: () => void;
   onBrowseResources?: () => void;
   onRefresh?: () => void;
+  onReservationTimeSaved?: (reservation: ConfirmedReservationTime) => void;
   isLoading?: boolean;
 }
 
@@ -106,15 +110,18 @@ export function TimelineGrid({
   effectiveSchedule,
   departments = [],
   isAdmin = false,
-  onSelectSlot,
+  onSelectRange,
   onNewReservation,
   onBrowseResources,
   onRefresh,
+  onReservationTimeSaved,
   isLoading = false,
 }: TimelineGridProps) {
   const router = useRouter();
   const toast = useToast();
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const [rangeAnchor, setRangeAnchor] = useState<{ resourceId: string; index: number; date: string; timelineStartMs: number } | null>(null);
+  const [rangeHover, setRangeHover] = useState<number | null>(null);
 
   // Helper to extract Colombo HH:MM time
   const getColomboHHMM = (date: Date | string): string => {
@@ -133,27 +140,35 @@ export function TimelineGrid({
     resource: TimelineResourceItem;
   } | null>(null);
 
-  // Drag state for resizing reservation start/end times
-  const [dragState, setDragState] = useState<{
+  // One pointer interaction handles body moves and independent edge resizes.
+  type BookingDrag = {
     bookingId: string;
     reservationId: string;
     resource: TimelineResourceItem;
     booking: ReservationOccupancy;
-    edge: "start" | "end";
+    edge: DragMode;
     startX: number;
+    pointerId: number;
+    containerWidth: number;
     initialStartMs: number;
     initialEndMs: number;
     proposedStartMs: number;
     proposedEndMs: number;
     hasMoved: boolean;
+    invalidReason: "shift" | "conflict" | null;
     expectedUpdatedAt: string;
-  } | null>(null);
+  };
+  const [dragState, setDragState] = useState<BookingDrag | null>(null);
+  const dragRef = useRef<BookingDrag | null>(null);
+  const suppressClickUntilRef = useRef(0);
+  const [confirmedTimes, setConfirmedTimes] = useState<Record<string, ConfirmedReservationTime>>({});
 
   // Modal to confirm time adjustment after dragging
   const [confirmModalState, setConfirmModalState] = useState<{
     isOpen: boolean;
     reservationId: string;
     resourceName: string;
+    departmentName: string;
     title?: string;
     originalStart: Date;
     originalEnd: Date;
@@ -218,6 +233,8 @@ export function TimelineGrid({
   }
 
   const totalTimelineMs = timelineEndUtc - timelineStartUtc;
+  const activeAnchor = rangeAnchor?.date === selectedDate && rangeAnchor.timelineStartMs === timelineStartUtc ? rangeAnchor : null;
+  const canSelectFreeRange = Boolean(onSelectRange && effectiveSchedule?.operationalDate === selectedDate);
 
   // Generate dynamic 30-min time slots
   const timeSlots = generateShiftTimelineSlots(startMinute, durationMinutes);
@@ -225,15 +242,16 @@ export function TimelineGrid({
   // Width calculation for horizontal scroll (minimum 42px per half-hour column)
   const gridMinWidth = Math.max(960, timeSlots.length * 44);
 
-  // Filter to ONLY resources that have at least one blocking reservation overlapping this operational window
-  const bookedResourceIds = new Set(
-    effectiveOccupancy
-      .filter((o) => o.status === "PENDING" || o.status === "APPROVED")
-      .map((o) => o.resourceId)
+  const displayedOccupancy = Object.values(confirmedTimes).reduce(
+    (items, confirmed) => {
+      const current = items.find((item) => item.id === confirmed.id);
+      if (!current || (current.updatedAt && new Date(current.updatedAt).getTime() >= new Date(confirmed.updatedAt).getTime())) return items;
+      return applyConfirmedTime(items, confirmed);
+    }, effectiveOccupancy,
   );
-  const bookedResources = resources.filter((res) =>
-    bookedResourceIds.has(res.id)
-  );
+  const timelineResources = bookedTimelineResources(resources, displayedOccupancy, timelineStartUtc, timelineEndUtc);
+  const shiftHoursLabel = formatShiftHours(startMinute, durationMinutes);
+  const isDragging = dragState !== null;
 
   const renderIcon = (catName?: string) => {
     const lower = (catName || "").toLowerCase();
@@ -275,6 +293,16 @@ export function TimelineGrid({
     if (dragState && bookingKey && dragState.bookingId === bookingKey) {
       s = dragState.proposedStartMs;
       e = dragState.proposedEndMs;
+      if (e <= s) {
+        s = dragState.initialStartMs;
+        e = dragState.initialEndMs;
+      } else if (e <= timelineStartUtc) {
+        e = timelineStartUtc + (e - s);
+        s = timelineStartUtc;
+      } else if (s >= timelineEndUtc) {
+        s = timelineEndUtc - (e - s);
+        e = timelineEndUtc;
+      }
     }
 
     // Clip to visible window
@@ -308,7 +336,7 @@ export function TimelineGrid({
     e: React.PointerEvent,
     booking: ReservationOccupancy,
     resource: TimelineResourceItem,
-    edge: "start" | "end"
+    edge: DragMode
   ) => {
     if (!isAdmin) return;
     const count = booking.reservationIds?.length ?? 1;
@@ -320,7 +348,7 @@ export function TimelineGrid({
     const reservationId = booking.reservationIds?.[0] || booking.id || "";
     const expectedUpdatedAt = bookingRevision(booking, reservationId);
     if (!reservationId || !expectedUpdatedAt) {
-      toast.error("Booking details are incomplete. Refresh the schedule before resizing.");
+      toast.error("Booking details are incomplete. Refresh the schedule before editing.");
       onRefresh?.();
       return;
     }
@@ -328,59 +356,61 @@ export function TimelineGrid({
     const initialStartMs = new Date(booking.startTime).getTime();
     const initialEndMs = new Date(booking.endTime).getTime();
 
-    try {
-      (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
-    } catch {}
-
     const bookingKey = booking.id || booking.reservationIds?.[0] || `${booking.resourceId}`;
-
-    setDragState({
+    const containerWidth = (e.currentTarget.closest('[data-timeline-container="true"]') as HTMLElement | null)?.getBoundingClientRect().width || 1000;
+    const next: BookingDrag = {
       bookingId: bookingKey,
       reservationId,
       resource,
       booking,
       edge,
       startX: e.clientX,
+      pointerId: e.pointerId,
+      containerWidth,
       initialStartMs,
       initialEndMs,
       proposedStartMs: initialStartMs,
       proposedEndMs: initialEndMs,
       hasMoved: false,
+      invalidReason: null,
       expectedUpdatedAt,
-    });
+    };
+    dragRef.current = next;
+    setDragState(next);
   };
 
   useEffect(() => {
-    if (!dragState) return;
+    if (!isDragging) return;
 
-    const onPointerMove = (e: MouseEvent | PointerEvent) => {
-      const container = document.querySelector('[data-timeline-container="true"]');
-      const containerWidth = container?.getBoundingClientRect().width || 1000;
-      const deltaX = e.clientX - dragState.startX;
-      const deltaMs = (deltaX / containerWidth) * totalTimelineMs;
-      const stepMs = (effectiveSchedule?.timelineIntervalMinutes ?? 30) * 60 * 1000;
-
-      let hasMoved = dragState.hasMoved;
-      if (Math.abs(deltaX) > 4) {
-        hasMoved = true;
-      }
-
-      if (dragState.edge === "start") {
-        const rawMs = dragState.initialStartMs + deltaMs;
-        const snappedMs = timelineStartUtc + Math.round((rawMs - timelineStartUtc) / stepMs) * stepMs;
-        const clampedMs = Math.max(timelineStartUtc, Math.min(dragState.initialEndMs - stepMs, snappedMs));
-        setDragState((prev) => (prev ? { ...prev, proposedStartMs: clampedMs, hasMoved } : null));
-      } else {
-        const rawMs = dragState.initialEndMs + deltaMs;
-        const snappedMs = timelineStartUtc + Math.round((rawMs - timelineStartUtc) / stepMs) * stepMs;
-        const clampedMs = Math.min(timelineEndUtc, Math.max(dragState.initialStartMs + stepMs, snappedMs));
-        setDragState((prev) => (prev ? { ...prev, proposedEndMs: clampedMs, hasMoved } : null));
-      }
+    const onPointerMove = (e: PointerEvent) => {
+      const current = dragRef.current;
+      if (!current || e.pointerId !== current.pointerId) return;
+      const deltaX = e.clientX - current.startX;
+      if (!current.hasMoved && Math.abs(deltaX) <= 5) return;
+      const proposal = proposeTimelineDrag({
+        mode: current.edge,
+        initialStartMs: current.initialStartMs,
+        initialEndMs: current.initialEndMs,
+        deltaX,
+        containerWidth: current.containerWidth,
+        windowStartMs: timelineStartUtc,
+        windowEndMs: timelineEndUtc,
+        intervalMinutes: effectiveSchedule?.timelineIntervalMinutes ?? 30,
+      });
+      const invalidReason = proposal.outsideShift ? "shift" :
+        dragOverlapsBooking(effectiveOccupancy, current.resource.id, current.reservationId, proposal.startMs, proposal.endMs)
+          ? "conflict" : null;
+      const next = { ...current, proposedStartMs: proposal.startMs, proposedEndMs: proposal.endMs,
+        hasMoved: true, invalidReason } satisfies BookingDrag;
+      dragRef.current = next;
+      setDragState(next);
     };
 
-    const onPointerUp = () => {
+    const onPointerUp = (e: PointerEvent) => {
+      const current = dragRef.current;
+      if (!current || e.pointerId !== current.pointerId) return;
       const {
-        hasMoved,
+        hasMoved, invalidReason,
         proposedStartMs,
         proposedEndMs,
         initialStartMs,
@@ -389,15 +419,25 @@ export function TimelineGrid({
         resource,
         booking,
         expectedUpdatedAt,
-      } = dragState;
+      } = current;
 
+      dragRef.current = null;
       setDragState(null);
+      if (hasMoved) suppressClickUntilRef.current = performance.now() + 350;
+
+      if (hasMoved && invalidReason) {
+        toast.error(invalidReason === "shift" ? `Choose a time within the office shift (${shiftHoursLabel}).` :
+          "That time is occupied by another booking. Choose a different interval.");
+        return;
+      }
 
       if (hasMoved && (proposedStartMs !== initialStartMs || proposedEndMs !== initialEndMs)) {
+        const department = departments.find((item) => item.id === booking.departmentId);
         setConfirmModalState({
           isOpen: true,
           reservationId,
           resourceName: resource.name,
+          departmentName: department?.name || "Unassigned / Legacy",
           title: booking.title,
           originalStart: new Date(initialStartMs),
           originalEnd: new Date(initialEndMs),
@@ -413,16 +453,14 @@ export function TimelineGrid({
 
     window.addEventListener("pointermove", onPointerMove);
     window.addEventListener("pointerup", onPointerUp);
-    window.addEventListener("mousemove", onPointerMove);
-    window.addEventListener("mouseup", onPointerUp);
+    window.addEventListener("pointercancel", onPointerUp);
 
     return () => {
       window.removeEventListener("pointermove", onPointerMove);
       window.removeEventListener("pointerup", onPointerUp);
-      window.removeEventListener("mousemove", onPointerMove);
-      window.removeEventListener("mouseup", onPointerUp);
+      window.removeEventListener("pointercancel", onPointerUp);
     };
-  }, [dragState, timelineStartUtc, timelineEndUtc, totalTimelineMs, effectiveSchedule?.timelineIntervalMinutes]);
+  }, [isDragging, timelineStartUtc, timelineEndUtc, effectiveSchedule?.timelineIntervalMinutes, effectiveOccupancy, departments, shiftHoursLabel, toast]);
 
   // Commit proposed drag time change to database
   const handleConfirmTimeChange = async () => {
@@ -439,9 +477,12 @@ export function TimelineGrid({
       });
 
       if (res.success) {
+        const confirmed = res.data.reservation;
+        setConfirmedTimes((previous) => ({ ...previous, [confirmed.id]: confirmed }));
+        onReservationTimeSaved?.(confirmed);
         toast.success("Reservation time updated successfully.");
         setConfirmModalState(null);
-        onRefresh?.();
+        if (!onReservationTimeSaved) onRefresh?.();
         router.refresh();
       } else {
         let errorMsg = res.error || "Failed to update reservation time.";
@@ -487,6 +528,7 @@ export function TimelineGrid({
       return;
     }
 
+    setInspectBooking(null);
     setAccessibleEditModalState({
       isOpen: true,
       reservationId,
@@ -516,6 +558,7 @@ export function TimelineGrid({
       return;
     }
 
+    setInspectBooking(null);
     setAccessibleEditModalState({
       isOpen: true,
       reservationId: b.id,
@@ -554,10 +597,13 @@ export function TimelineGrid({
       });
 
       if (res.success) {
+        const confirmed = res.data.reservation;
+        setConfirmedTimes((previous) => ({ ...previous, [confirmed.id]: confirmed }));
+        onReservationTimeSaved?.(confirmed);
         toast.success("Reservation time updated successfully.");
         setAccessibleEditModalState(null);
         setInspectBooking(null);
-        onRefresh?.();
+        if (!onReservationTimeSaved) onRefresh?.();
         router.refresh();
       } else {
         let errorMsg = res.error || "Failed to update reservation time.";
@@ -598,7 +644,25 @@ export function TimelineGrid({
     return false;
   };
 
-  const shiftHoursLabel = formatShiftHours(startMinute, durationMinutes);
+  const chooseFreeSlot = (resourceId: string, index: number) => {
+    if (!onSelectRange || !canSelectFreeRange) return;
+    if (!activeAnchor || activeAnchor.resourceId !== resourceId) {
+      setRangeAnchor({ resourceId, index, date: selectedDate, timelineStartMs: timelineStartUtc });
+      setRangeHover(index);
+      return;
+    }
+    const range = selectFreeTimelineRange(resourceId, activeAnchor.index, index,
+      timelineStartUtc, timelineEndUtc, 30, effectiveOccupancy);
+    setRangeAnchor(null);
+    setRangeHover(null);
+    if (!range) {
+      toast.error("That range crosses a booking or the office shift boundary. Select free slots only.");
+      return;
+    }
+    onSelectRange(resourceId,
+      minuteToTimeStr(startMinute + range.startIndex * 30),
+      minuteToTimeStr(startMinute + range.endIndex * 30));
+  };
 
   return (
     <div className="space-y-3">
@@ -729,12 +793,22 @@ export function TimelineGrid({
           </div>
         </div>
 
+        {onSelectRange && !isLoading && timelineResources.length > 0 && (
+          <div className="px-4 py-2 border-b border-blue-100 bg-blue-50/50 text-[11px] text-blue-800" aria-live="polite">
+            {!canSelectFreeRange
+              ? "Loading office shift availability before range selection…"
+              : activeAnchor
+              ? "Choose the ending free slot on the same resource. Select the same slot for 30 minutes; press Escape to cancel."
+              : "To book a free range, select its first slot, then its last slot on the same resource."}
+          </div>
+        )}
+
         {isLoading ? (
           <div className="py-16 text-center text-xs text-slate-400 flex items-center justify-center gap-2">
             <Loader2 className="h-4 w-4 animate-spin text-blue-600" />
             <span>Loading schedule timeline...</span>
           </div>
-        ) : bookedResources.length === 0 ? (
+        ) : timelineResources.length === 0 ? (
           /* Empty State: No reservations scheduled for this date */
           <div className="py-12 px-6 text-center space-y-3">
             <div className="h-12 w-12 rounded-2xl bg-blue-50 border border-blue-100 flex items-center justify-center text-blue-600 mx-auto shadow-2xs">
@@ -742,7 +816,7 @@ export function TimelineGrid({
             </div>
             <div className="max-w-md mx-auto space-y-1">
               <h3 className="text-sm font-bold text-slate-800">
-                No reservations scheduled for this operational window
+                No reservations scheduled for this date.
               </h3>
               <p className="text-xs text-slate-400">
                 There are no active reservations on{" "}
@@ -778,14 +852,14 @@ export function TimelineGrid({
             </div>
           </div>
         ) : (
-          /* Active Schedule Table with ONLY Booked Resources & Horizontally Scrollable Timeline */
+          /* Only resources with blocking bookings in this window are shown. */
           <div className="overflow-x-auto relative" ref={scrollContainerRef}>
             <div style={{ minWidth: `${gridMinWidth}px` }}>
               {/* Header Row: Sticky Resources column + Dynamic Time markers */}
               <div className="flex items-center border-b border-[#E5E7EB] bg-slate-50/70 text-[11px] font-semibold text-slate-500">
                 {/* Sticky Left Resource Column */}
                 <div className="w-56 p-3 pl-4 border-r border-[#E5E7EB] shrink-0 font-bold text-slate-800 flex items-center justify-between sticky left-0 z-20 bg-slate-50 shadow-[2px_0_6px_-2px_rgba(0,0,0,0.06)]">
-                  <span>Resources with Bookings</span>
+                  <span>Resources</span>
                   <span className="text-slate-400">
                     <ChevronLeft className="h-3.5 w-3.5" />
                   </span>
@@ -821,8 +895,8 @@ export function TimelineGrid({
 
               {/* Resource Rows: ONLY Booked Resources */}
               <div className="divide-y divide-[#E5E7EB]">
-                {bookedResources.map((res) => {
-                  const resourceBookings = effectiveOccupancy.filter(
+                {timelineResources.map((res) => {
+                  const resourceBookings = displayedOccupancy.filter(
                     (o) =>
                       o.resourceId === res.id &&
                       (o.status === "PENDING" || o.status === "APPROVED")
@@ -862,38 +936,56 @@ export function TimelineGrid({
                             gridTemplateColumns: `repeat(${timeSlots.length}, minmax(0, 1fr))`,
                           }}
                         >
-                          {timeSlots.map((slot) => {
+                          {timeSlots.map((slot, slotIndex) => {
                             const blocked = isSlotBlocked(res.id, slot.minuteOffset);
+                            const preview = activeAnchor?.resourceId === res.id && rangeHover !== null
+                              ? selectFreeTimelineRange(res.id, activeAnchor.index, rangeHover,
+                                  timelineStartUtc, timelineEndUtc, 30, effectiveOccupancy)
+                              : null;
+                            const isSelected = preview && slotIndex >= preview.startIndex && slotIndex < preview.endIndex;
                             return (
-                              <div
+                              <button
+                                type="button"
                                 key={`${slot.slotTime}-${slot.minuteOffset}`}
-                                onClick={() => {
-                                  if (res.isActive && !blocked) {
-                                    onSelectSlot?.(res.id, slot.slotTime);
+                                disabled={!res.isActive || blocked || !canSelectFreeRange}
+                                onClick={() => chooseFreeSlot(res.id, slotIndex)}
+                                onPointerEnter={() => {
+                                  if (activeAnchor?.resourceId === res.id) setRangeHover(slotIndex);
+                                }}
+                                onFocus={() => {
+                                  if (activeAnchor?.resourceId === res.id) setRangeHover(slotIndex);
+                                }}
+                                onKeyDown={(event) => {
+                                  if (event.key === "Escape") {
+                                    setRangeAnchor(null);
+                                    setRangeHover(null);
                                   }
                                 }}
+                                aria-label={`${res.name}, ${slot.label}, ${blocked ? "reserved" : "free"}${activeAnchor ? ", choose range end" : ", choose range start"}`}
+                                aria-pressed={Boolean(isSelected)}
                                 className={cn(
-                                  "h-full relative flex items-center justify-center transition-colors group/cell",
+                                  "h-full relative flex items-center justify-center transition-colors group/cell focus-visible:outline-2 focus-visible:outline-blue-600 focus-visible:z-10",
                                   blocked
                                     ? "bg-transparent cursor-default"
                                     : res.isActive
                                     ? "hover:bg-blue-50/40 cursor-pointer"
-                                    : "bg-slate-50/40 cursor-not-allowed opacity-60"
+                                    : "bg-slate-50/40 cursor-not-allowed opacity-60",
+                                  isSelected && "bg-blue-100/80 ring-inset ring-1 ring-blue-300"
                                 )}
                                 title={
                                   blocked
                                     ? undefined
                                     : res.isActive
-                                    ? `Available · Click to reserve ${res.name} at ${slot.label}`
+                                    ? `Available · Select ${slot.label} on ${res.name} to ${activeAnchor ? "end" : "start"} a booking range`
                                     : `${res.name} is inactive`
                                 }
                               >
                                 {res.isActive && !blocked && (
-                                  <span className="opacity-0 group-hover/cell:opacity-100 text-blue-600 transition-opacity">
+                                  <span className="opacity-0 group-hover/cell:opacity-100 group-focus-visible/cell:opacity-100 text-blue-600 transition-opacity">
                                     <Plus className="h-3.5 w-3.5" />
                                   </span>
                                 )}
-                              </div>
+                              </button>
                             );
                           })}
                         </div>
@@ -926,8 +1018,13 @@ export function TimelineGrid({
                               booking.reservationIds?.length ?? 1;
                             const isGrouped = count > 1;
 
-                            const isNarrow = pos.width < 10.0;
-                            const isVeryNarrow = pos.width < 5.0;
+                            const isWide = pos.width >= 26;
+                            const isNarrow = pos.width < 10;
+                            const compactTime = (value: Date | string) => {
+                              const [hour, minute] = getColomboHHMM(value).split(":");
+                              return `${Number(hour) % 12 || 12}${minute === "00" ? "" : `:${minute}`}`;
+                            };
+                            const compactInterval = `${compactTime(booking.startTime)}–${compactTime(booking.endTime)}`;
 
                             const isDraggingThis =
                               dragState?.bookingId === bookingKey;
@@ -962,7 +1059,7 @@ export function TimelineGrid({
                                 ? `User: ${booking.user.name}`
                                 : null,
                               isAdmin && !isGrouped
-                                ? "Drag handles to adjust times"
+                                ? "Drag the block to move it; drag handles to adjust times"
                                 : null,
                               "Click to inspect details",
                             ]
@@ -972,7 +1069,7 @@ export function TimelineGrid({
                             return (
                               <div
                                 key={bookingKey}
-                                className="group/block absolute top-1.5 bottom-1.5 pointer-events-auto"
+                                className={cn("group/block absolute top-1.5 bottom-1.5 pointer-events-auto", isDraggingThis && "z-30 transition-[left,width] duration-100 ease-out", isDraggingThis && dragState.invalidReason && "z-30")}
                                 style={{
                                   left: `${pos.left}%`,
                                   width: `${pos.width}%`,
@@ -980,31 +1077,41 @@ export function TimelineGrid({
                               >
                                 {/* Floating Live Time Drag Preview */}
                                 {isDraggingThis && (
-                                  <div className="absolute -top-7 left-1/2 -translate-x-1/2 bg-slate-900 text-white text-[10px] font-bold px-2 py-0.5 rounded-md shadow-md pointer-events-none z-40 whitespace-nowrap flex items-center gap-1 ring-1 ring-white/20">
+                                  <div className={cn("absolute -top-7 left-1/2 -translate-x-1/2 bg-slate-900 text-white text-[10px] font-bold px-2 py-0.5 rounded-md shadow-md pointer-events-none z-40 whitespace-nowrap flex items-center gap-1 ring-1 ring-white/20", dragState.invalidReason && "bg-rose-700")}>
                                     <Clock className="h-3 w-3 text-blue-400" />
                                     <span>
                                       {formatColomboInterval(
                                         new Date(dragState.proposedStartMs),
                                         new Date(dragState.proposedEndMs)
                                       )}
+                                      {dragState.invalidReason && " · Unavailable"}
                                     </span>
                                   </div>
                                 )}
 
                                 <button
                                   type="button"
+                                  onPointerDown={(e) => {
+                                    if (isAdmin && !isGrouped && bookingRevision(booking, booking.reservationIds?.[0] || booking.id || "")) {
+                                      handleStartDrag(e, booking, res, "move");
+                                    }
+                                  }}
                                   onClick={() => {
-                                    if (dragState?.hasMoved) return;
+                                    if (performance.now() < suppressClickUntilRef.current) {
+                                      return;
+                                    }
                                     setInspectBooking({
                                       booking,
                                       resource: res,
                                     });
                                   }}
                                   className={cn(
-                                    "absolute inset-0 rounded-lg border shadow-2xs transition-all select-none overflow-visible flex items-center px-1.5 py-0.5 z-10 cursor-pointer text-left hover:brightness-95 focus:outline-none focus:ring-2 focus:ring-blue-500",
+                                    "absolute inset-0 rounded-lg border shadow-2xs transition-all select-none overflow-hidden flex items-center px-1.5 py-0.5 z-10 cursor-pointer text-left hover:brightness-95 focus:outline-none focus:ring-2 focus:ring-blue-500",
+                                    isAdmin && !isGrouped && "cursor-grab touch-none hover:shadow-md hover:ring-1 hover:ring-blue-400/50",
                                     isPending && "border-amber-400 border-dashed",
                                     isDraggingThis &&
-                                      "ring-2 ring-blue-500 z-30 opacity-95 shadow-md"
+                                      "ring-2 ring-blue-500 z-30 opacity-95 shadow-md cursor-grabbing",
+                                    isDraggingThis && dragState.invalidReason && "!ring-rose-500 !border-rose-500",
                                   )}
                                   style={{
                                     backgroundColor: colorScheme.bg,
@@ -1015,17 +1122,15 @@ export function TimelineGrid({
                                   }}
                                   title={tooltipText}
                                 >
-                                  <div className="flex items-center justify-between gap-1 w-full min-w-0 px-1">
-                                    {/* Left: Status Indicator + Department Badge + Title */}
-                                    <div className="flex items-center gap-1.5 min-w-0 truncate">
-                                      {isPending ? (
-                                        <span className="h-2 w-2 rounded-full bg-amber-500 ring-2 ring-amber-300 animate-pulse shrink-0" />
+                                  <div className={cn("flex w-full min-w-0 max-w-full overflow-hidden", isWide ? "items-center justify-between gap-1" : "flex-col justify-center gap-0.5")}>
+                                    <div className="flex min-w-0 max-w-full items-center gap-1 overflow-hidden">
+                                      {!isNarrow && (isPending ? (
+                                        <span className="h-1.5 w-1.5 rounded-full bg-amber-500 shrink-0" />
                                       ) : (
-                                        <span className="h-2 w-2 rounded-full bg-emerald-500 shrink-0" />
-                                      )}
-
+                                        <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 shrink-0" />
+                                      ))}
                                       <span
-                                        className="text-[9px] font-bold px-1.5 py-0.2 rounded shrink-0 shadow-2xs border tracking-tight"
+                                        className={cn("min-w-0 max-w-full truncate rounded border px-1 text-[9px] leading-3 font-bold tracking-tight shadow-2xs", isWide && "shrink-0")}
                                         style={{
                                           backgroundColor: colorScheme.badgeBg,
                                           borderColor: colorScheme.badgeBorder,
@@ -1034,15 +1139,15 @@ export function TimelineGrid({
                                       >
                                         {isNarrow
                                           ? isLegacy
-                                            ? "UNASSIGNED"
-                                            : (dept?.code || colorScheme.code || "DEP").slice(0, 4)
+                                            ? "—"
+                                            : (dept?.code || colorScheme.code || "DEP").slice(0, 3)
                                           : isLegacy
                                           ? "Legacy / Unassigned"
                                           : dept?.code || colorScheme.code}
                                       </span>
 
-                                      {!isVeryNarrow && (
-                                        <span className="text-[10px] font-bold truncate">
+                                      {!isNarrow && (
+                                        <span className="min-w-0 flex-1 truncate text-[10px] leading-3 font-bold">
                                           {isAdmin && booking.title
                                             ? booking.title
                                             : statusLabel}
@@ -1050,19 +1155,14 @@ export function TimelineGrid({
                                       )}
                                     </div>
 
-                                    {/* Right: Group Count + Time Interval */}
-                                    <div className="flex items-center gap-1 shrink-0 text-[9px] font-semibold opacity-90">
-                                      {isGrouped && (
-                                        <span className="inline-flex items-center gap-0.5 px-1 py-0.2 rounded bg-white/90 text-slate-800 text-[8px] font-bold border border-slate-200 shadow-2xs">
+                                    <div className={cn("flex min-w-0 max-w-full items-center gap-1 overflow-hidden text-[9px] leading-3 font-semibold opacity-90", isWide ? "shrink-0" : "w-full")}>
+                                      {isGrouped && !isNarrow && (
+                                        <span className="inline-flex shrink-0 items-center gap-0.5 rounded border border-slate-200 bg-white/90 px-1 text-[8px] font-bold text-slate-800 shadow-2xs">
                                           <Layers className="h-2.5 w-2.5" />
                                           {count}
                                         </span>
                                       )}
-                                      {!isNarrow && (
-                                        <span className="hidden sm:inline truncate">
-                                          {intervalStr}
-                                        </span>
-                                      )}
+                                      <span className={cn("block min-w-0 max-w-full truncate", isNarrow && "text-[8px] tracking-tighter")}>{isWide ? intervalStr : compactInterval}</span>
                                     </div>
                                   </div>
 
@@ -1085,7 +1185,7 @@ export function TimelineGrid({
                                           openAccessibleEditModal(booking, res);
                                         }
                                       }}
-                                      className="group/start absolute left-0 top-0 bottom-0 w-4 z-20 cursor-col-resize flex items-center justify-center opacity-0 group-hover/block:opacity-70 hover:!opacity-100 focus-visible:opacity-100 bg-blue-500/10 hover:bg-blue-500/25 focus-visible:bg-blue-500/25 border-l-2 border-blue-500/40 hover:border-blue-600 focus-visible:border-blue-600 transition-opacity duration-150 select-none rounded-l-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
+                                      className={cn("group/start absolute left-0 top-0 bottom-0 w-4 z-20 cursor-col-resize flex items-center justify-center opacity-0 group-hover/block:opacity-60 hover:!opacity-100 focus-visible:opacity-100 bg-blue-500/15 hover:bg-blue-500/30 focus-visible:bg-blue-500/30 border-l-[3px] border-blue-500/60 hover:border-blue-700 focus-visible:border-blue-700 hover:shadow-[inset_3px_0_8px_rgba(37,99,235,0.22)] transition-opacity duration-150 select-none rounded-l-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600", isDraggingThis && dragState.edge === "start" && "!opacity-100 bg-blue-500/35 border-blue-700 shadow-[inset_3px_0_8px_rgba(37,99,235,0.3)]")}
                                     >
                                       <div className="h-4 w-0.5 rounded-full bg-blue-600 shadow-xs" />
                                       <span role="tooltip" className="pointer-events-none absolute bottom-full left-0 mb-1 whitespace-nowrap rounded bg-slate-900 px-2 py-1 text-[10px] font-medium text-white shadow-sm opacity-0 group-hover/start:opacity-100 group-focus-within/start:opacity-100 transition-opacity">Adjust start time</span>
@@ -1106,7 +1206,7 @@ export function TimelineGrid({
                                           openAccessibleEditModal(booking, res);
                                         }
                                       }}
-                                      className="group/end absolute right-0 top-0 bottom-0 w-4 z-20 cursor-col-resize flex items-center justify-center opacity-0 group-hover/block:opacity-70 hover:!opacity-100 focus-visible:opacity-100 bg-blue-500/10 hover:bg-blue-500/25 focus-visible:bg-blue-500/25 border-r-2 border-blue-500/40 hover:border-blue-600 focus-visible:border-blue-600 transition-opacity duration-150 select-none rounded-r-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
+                                      className={cn("group/end absolute right-0 top-0 bottom-0 w-4 z-20 cursor-col-resize flex items-center justify-center opacity-0 group-hover/block:opacity-60 hover:!opacity-100 focus-visible:opacity-100 bg-blue-500/15 hover:bg-blue-500/30 focus-visible:bg-blue-500/30 border-r-[3px] border-blue-500/60 hover:border-blue-700 focus-visible:border-blue-700 hover:shadow-[inset_-3px_0_8px_rgba(37,99,235,0.22)] transition-opacity duration-150 select-none rounded-r-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600", isDraggingThis && dragState.edge === "end" && "!opacity-100 bg-blue-500/35 border-blue-700 shadow-[inset_-3px_0_8px_rgba(37,99,235,0.3)]")}
                                     >
                                       <div className="h-4 w-0.5 rounded-full bg-blue-600 shadow-xs" />
                                       <span role="tooltip" className="pointer-events-none absolute bottom-full right-0 mb-1 whitespace-nowrap rounded bg-slate-900 px-2 py-1 text-[10px] font-medium text-white shadow-sm opacity-0 group-hover/end:opacity-100 group-focus-within/end:opacity-100 transition-opacity">Adjust end time</span>
@@ -1619,6 +1719,10 @@ export function TimelineGrid({
                   <span className="text-xs font-medium text-slate-900">{confirmModalState.title}</span>
                 </div>
               )}
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-slate-700">Department</span>
+                <span className="text-xs font-medium text-slate-900">{confirmModalState.departmentName}</span>
+              </div>
             </div>
 
             <div className="grid grid-cols-2 gap-3">

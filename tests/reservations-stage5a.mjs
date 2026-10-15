@@ -213,7 +213,13 @@ try {
     startTime: new Date(futureBounds.start.valueOf() - 10 * 60_000).toISOString(),
     endTime: new Date(futureBounds.start.valueOf() + 10 * 60_000).toISOString(),
   };
-  succeeds(await action("createReservationAction", [input(midnight, resourceId, `Midnight ${tag}`)], member));
+  fails(await action("createReservationAction", [input(midnight, resourceId, `Midnight ${tag}`)], member), "SHIFT_OUTSIDE_WINDOW");
+  // The calendar boundary query still needs an isolated cross-midnight record.
+  // Insert it directly so this read test does not weaken active shift validation.
+  await prisma.reservation.create({ data: {
+    resourceId, userId: userIds[0], createdByUserId: userIds[0], departmentId,
+    title: `Midnight ${tag}`, startTime: midnight.startTime, endTime: midnight.endTime, status: "PENDING",
+  } });
   const onDay = JSON.parse(await action("getReservationsForDateAction", [{ date: futureDay, resourceId }], member));
   assert.ok(onDay.data.some((item) => item.resourceId === resourceId && item.startTime === midnight.startTime));
   assert.ok(onDay.data.every((item) => !("title" in item) && !("userId" in item)));

@@ -112,6 +112,12 @@ try {
   const concurrent = await Promise.all([edit(60, 160, version), edit(60, 170, version)]);
   assert.equal(concurrent.filter((r) => r.success).length, 1);
   assert.equal(concurrent.filter((r) => r.code === "STALE_UPDATE").length, 1);
+  const wonEdit = concurrent.find((r) => r.success).data.reservation;
+  const duration = Date.parse(wonEdit.endTime) - Date.parse(wonEdit.startTime);
+  const movedEndMinute = Math.round((Date.parse(wonEdit.endTime) - at(0).getTime()) / 60_000) - 30;
+  const moved = ok(await edit(30, movedEndMinute, wonEdit.updatedAt)).reservation;
+  assert.equal(moved.id, first.id);
+  assert.equal(Date.parse(moved.endTime) - Date.parse(moved.startTime), duration);
   const persisted = await prisma.reservation.findUniqueOrThrow({ where: { id: first.id } });
   assert.equal(persisted.id, first.id);
   assert.equal(persisted.resourceId, resource.id);
@@ -119,9 +125,9 @@ try {
   assert.equal(persisted.userId, ids.users[1]);
   assert.equal(persisted.createdByUserId, ids.users[0]);
   assert.equal(persisted.status, "APPROVED");
-  assert.equal(persisted.startTime.toISOString(), iso(at(60)));
-  assert.equal(persisted.endTime.toISOString(), concurrent.find((r) => r.success).data.reservation.endTime);
-  assert.equal(await prisma.reservationTimeChange.count({ where: { reservationId: first.id } }), 5);
+  assert.equal(persisted.startTime.toISOString(), iso(at(30)));
+  assert.equal(persisted.endTime.toISOString(), moved.endTime);
+  assert.equal(await prisma.reservationTimeChange.count({ where: { reservationId: first.id } }), 6);
   assert.equal((await prisma.reservation.findUniqueOrThrow({ where: { id: second.id } })).endTime.toISOString(), iso(at(240)));
   assert.equal((await prisma.reservation.findUniqueOrThrow({ where: { id: third.id } })).startTime.toISOString(), iso(at(240)));
   const grouped = ok(await action("getGroupedReservationsForDateAction", [{ date, resourceId: resource.id }], admin));
