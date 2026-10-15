@@ -1,7 +1,47 @@
 # Slotify production readiness audit — Stage 8A and 8A.1
 
 **Date:** 2026-10-15  
-**Current decision: READY FOR NEON STAGING; NOT READY FOR PRODUCTION DEPLOYMENT.** Stage 8A.1 resolved the local test isolation and schema reconciliation blockers. Neon and Vercel have not been exercised. The Stage 8A baseline below is retained as a historical record of its original findings and exit codes.
+**Current decision: PREVIEW DEPLOYED; NOT READY FOR PRODUCTION DEPLOYMENT.** Stage 8B cloud verification is recorded below. The Stage 8A.1 and Stage 8A sections remain as historical findings.
+
+## Stage 8B — Neon staging and Vercel Preview, 2026-10-15
+
+### Deployment and database identity
+
+- Neon organization: Menuka. New isolated project `slotify-staging` (`restless-sea-15782818`), database `slotify_staging`, owner `slotify_staging_owner`, PostgreSQL 16, Singapore region. The empty database identity was verified before migration. The local application database was never targeted.
+- Applied the existing 13 migrations with `prisma migrate deploy` through the **direct** Neon endpoint; exit 0. `prisma migrate status` on the direct endpoint subsequently returned exit 0 and “Database schema is up to date.” The catalog contains `btree_gist`, the reservation GiST exclusion constraint, and four application triggers.
+- Prisma Client 6.4.1 uses the native PostgreSQL connector. Preview `DATABASE_URL` uses Neon’s **pooled** endpoint with `pgbouncer=true`, `connection_limit=5`, `pool_timeout=20`, and `connect_timeout=15`. Migration operations use a separate direct URL held only in an ignored local file. No Prisma adapter or Prisma 7 configuration was introduced.
+- Staging fixtures were created with `prisma/seed-staging.ts`: two randomly named accounts with privately generated passwords, one department, category, room, and shift. The seed verifies the Neon host, database, and role before writing and is repeatable; the rerun exited 0 without changing accounts. Credentials remain in ignored, mode-0600 `.env.staging.local`. No personal or local demo records were copied.
+- Vercel project: `slotify-staging` (`prj_DPyHjXoFlSTBMJ5haclmLSIEmHv9`). Current protected Preview: https://slotify-staging-r6mdiq83o-menukas-projects-0d8487fe.vercel.app . Preview has sensitive `DATABASE_URL` and `AUTH_SECRET`, plus `AUTH_TRUST_HOST=true`. Production environment has no configured variables. `AUTH_URL` is omitted so Auth.js can use the request host for unique Preview URLs. `.vercelignore` excludes all local environment files and build artifacts.
+
+### Actual cloud checks
+
+| Check | Result | Evidence |
+| --- | --- | --- |
+| Preview build and Prisma Client generation | PASS | Vercel build completed with Next.js 16.4.0 and Prisma 6.4.1 |
+| Public homepage, login, signup, Auth.js CSRF | PASS | HTTP 200 through current protected Preview using `vercel curl` |
+| Test-only reservation route | PASS | HTTP 404 on Preview |
+| ADMIN login and dashboard, resources, reservations, notifications, administration | PASS | Login HTTP 302; each authenticated page HTTP 200 |
+| MEMBER login and dashboard, resources, reservations, notifications | PASS | Login HTTP 302; each authenticated page HTTP 200 |
+| MEMBER administration route | PASS | HTTP 404 |
+| Neon overlap and adjacent interval | PASS | Disposable `APPROVED` records: overlap rejected by PostgreSQL, adjacent accepted; exit 0 |
+| Neon time update and reload | PASS | Existing reservation ID and modified start persisted on a fresh Prisma read; exit 0 |
+| Conflicting extension, then cancelled neighbor | PASS | Extension rejected while neighbor blocked; succeeded after neighbor became `CANCELLED`; exit 0 |
+| Test record cleanup | PASS | Both disposable reservations removed; original records untouched |
+| Direct migration status | PASS | Exit 0, all 13 migrations applied |
+| Local typecheck, lint | PASS | Each exit 0 after Stage 8B changes |
+| Local production build | PASS | `npm run build` exit 0 after Stage 8B changes |
+| Live app write flows: request, approval, cancellation, editing, administration mutations | **NOT VERIFIED** | Authenticated route rendering and direct Neon writes do not establish these Server Action flows |
+| Browser cookie attributes and pointer UI interactions | **NOT VERIFIED** | Automated Safari control was interrupted by concurrent user activity; HTTP route checks are not browser interaction tests |
+
+The first Preview was configured with `connection_limit=1`; authenticated dashboard requests produced Prisma `P2024` pool timeouts. Preview was changed to `connection_limit=5` and redeployed. The current Preview authenticated route smoke passed, and its sampled runtime logs showed no new errors. The earlier failing Preview deployment was removed. This is a configuration fix observed on the current deployment, not proof of sustained load capacity.
+
+**Deployment incident:** Vercel’s first deployment of the newly created project automatically targeted Production even though `--prod` was not supplied. It was protected by Vercel authentication, lacked the Preview environment, and logged `MissingSecret`. The deployment was immediately removed. Subsequent deployments used explicit `--target preview`; `vercel ls` showed only Preview deployments and the production alias returned 404. No production database variable was configured. A production deployment was not intentionally authorized or left active.
+
+### Security and remaining gate
+
+The Preview is Vercel-auth protected and uses distinct staging data and secrets. Development test routes are disabled. No secrets are in Git or the report. The current Preview proves build, routing, login, role-based route access, pooled database reads, migration compatibility, and database constraint behavior. It does **not** yet prove the full cloud mutation workflow, browser cookie flags, real pointer editing, sustained serverless concurrency, or all management actions. Complete those checks on the protected Preview before Production. Do not copy staging credentials to Production, and use a separate Production database and secrets.
+
+**Stage 8B decision: Preview deployed and usable for further staging QA; NOT READY FOR PRODUCTION.** No commit, push, or production deployment was performed as an intended release action.
 
 ## Stage 8A.1 blocker resolution — 2026-10-15
 
