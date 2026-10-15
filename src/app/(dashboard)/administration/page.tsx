@@ -46,7 +46,7 @@ export default async function AdministrationPage() {
         title="Administration"
         description="Manage organizational users, department assignments, access roles, and scheduling policies."
       />
-      <main className="flex-1 px-8 pb-12 max-w-7xl w-full space-y-6">
+      <main className="flex-1 px-4 sm:px-6 lg:px-8 pb-12 max-w-7xl w-full min-w-0 space-y-6">
         <Suspense fallback={<div className="p-8 text-center text-slate-500 font-medium text-sm">Loading administration portal...</div>}>
           <AdminUserManager
             users={users}

@@ -45,15 +45,15 @@ export default async function ResourceDetailPage({
         }
       />
 
-      <main className="flex-1 p-6 space-y-6 max-w-5xl mx-auto w-full">
+      <main className="flex-1 p-4 sm:p-6 space-y-6 max-w-5xl mx-auto w-full min-w-0">
         {/* Resource Header Card */}
-        <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-6">
-          <div className="flex items-start gap-4">
+        <div className="bg-white rounded-xl border border-slate-200 p-4 sm:p-6 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-6 min-w-0">
+          <div className="flex items-start gap-4 min-w-0">
             <div className="h-14 w-14 rounded-2xl bg-blue-50 border border-blue-100 flex items-center justify-center text-blue-600 shadow-2xs shrink-0">
               <Building2 className="h-7 w-7" />
             </div>
-            <div className="space-y-1">
-              <div className="flex items-center gap-2.5">
+            <div className="space-y-1 min-w-0">
+              <div className="flex flex-wrap items-center gap-2.5">
                 <span className="text-xs font-semibold text-blue-600 uppercase tracking-wider">
                   {resource.category.name}
                 </span>
@@ -66,7 +66,7 @@ export default async function ResourceDetailPage({
                   {resource.isActive ? "Operational" : "Deactivated"}
                 </Badge>
               </div>
-              <h2 className="text-2xl font-bold text-slate-900 tracking-tight">
+              <h2 className="text-2xl font-bold text-slate-900 tracking-tight break-words">
                 {resource.name}
               </h2>
               <p className="text-sm text-slate-500 max-w-xl">

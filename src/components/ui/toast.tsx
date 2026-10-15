@@ -48,7 +48,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
       <div
         role="region"
         aria-label="Notifications"
-        className="fixed bottom-5 right-5 z-50 flex flex-col gap-2 max-w-md w-full sm:w-auto pointer-events-none"
+        className="fixed inset-x-3 sm:inset-x-auto sm:right-5 bottom-[max(0.75rem,env(safe-area-inset-bottom))] z-50 flex flex-col gap-2 max-w-md sm:w-auto pointer-events-none"
       >
         {toasts.map((t) => (
           <div
@@ -86,7 +86,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
               )}
               <p
                 className={cn(
-                  "text-xs leading-relaxed",
+                  "text-xs leading-relaxed break-words [overflow-wrap:anywhere]",
                   t.title ? "text-slate-600 mt-0.5" : "text-slate-800 font-medium"
                 )}
               >
@@ -97,7 +97,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
             <button
               type="button"
               onClick={() => removeToast(t.id)}
-              className="text-slate-400 hover:text-slate-600 transition-colors p-1 rounded-md shrink-0 -mr-1 -mt-1"
+              className="text-slate-400 hover:text-slate-600 transition-colors p-2 rounded-md shrink-0 -mr-1 -mt-1"
               aria-label="Dismiss notification"
             >
               <X className="h-3.5 w-3.5" />

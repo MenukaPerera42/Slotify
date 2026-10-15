@@ -40,7 +40,7 @@ export default async function QuickActionsPage() {
         title="Quick Actions"
         description="Streamlined shortcuts to your daily reservation workflows and management tasks."
       />
-      <main className="flex-1 px-8 pb-12 max-w-7xl w-full space-y-6">
+      <main className="flex-1 px-4 sm:px-6 lg:px-8 pb-12 max-w-7xl w-full min-w-0 space-y-6">
         {/* Welcome Banner */}
         <div className="p-6 rounded-2xl bg-gradient-to-r from-blue-900 via-indigo-900 to-slate-900 text-white shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div className="space-y-1.5 max-w-xl">

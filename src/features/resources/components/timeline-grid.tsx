@@ -356,6 +356,8 @@ export function TimelineGrid({
     edge: DragMode
   ) => {
     if (!isAdmin) return;
+    // Touch users pan the timeline and edit exact times from booking details.
+    if (e.pointerType === "touch") return;
     const count = booking.reservationIds?.length ?? 1;
     if (count > 1) return; // Grouped reservations must be edited individually through details modal
 
@@ -908,6 +910,7 @@ export function TimelineGrid({
 
         {onSelectRange && !isLoading && timelineResources.length > 0 && (
           <div className="px-4 py-2 border-b border-blue-100 bg-blue-50/50 text-[11px] text-blue-800" aria-live="polite">
+            <span className="sm:hidden">On touch screens, tap a booking for details and Edit Times. </span>
             {!canSelectFreeRange
               ? "Loading office shift availability before range selection…"
               : activeAnchor
@@ -1220,7 +1223,7 @@ export function TimelineGrid({
                                   }}
                                   className={cn(
                                     "absolute inset-0 rounded-lg border shadow-2xs transition-all select-none overflow-hidden flex items-center px-1.5 py-0.5 z-10 cursor-pointer text-left hover:brightness-95 focus:outline-none focus:ring-2 focus:ring-blue-500",
-                                    isAdmin && !isGrouped && "cursor-grab touch-none hover:shadow-md hover:ring-1 hover:ring-blue-400/50",
+                                    isAdmin && !isGrouped && "cursor-grab touch-pan-x hover:shadow-md hover:ring-1 hover:ring-blue-400/50",
                                     isPending && "border-amber-400 border-dashed",
                                     isDraggingThis &&
                                       "ring-2 ring-blue-500 z-30 opacity-95 shadow-md cursor-grabbing",

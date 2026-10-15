@@ -56,21 +56,9 @@ export default async function ReservationsPage() {
   }
 
   return (
-    <div className="flex-1 flex flex-col min-w-0">
-      {/* Page Header matching Resources page layout */}
-      <header className="px-8 pt-7 pb-4">
-        <h1 className="text-2xl font-bold tracking-tight text-slate-900">
-          {user.role === "ADMIN" ? "Reservation Management" : "My Reservations"}
-        </h1>
-        <p className="text-xs text-slate-500 mt-1">
-          {user.role === "ADMIN"
-            ? "Manage organizational reservations, approvals, and resource schedules."
-            : "Schedule, track, and manage your room and equipment bookings."}
-        </p>
-      </header>
-
+    <div className="flex-1 flex flex-col min-w-0 max-w-full">
       {/* Main Content Area */}
-      <main className="flex-1 px-8 pb-12 max-w-7xl w-full">
+      <main className="flex-1 px-4 sm:px-6 lg:px-8 pt-6 sm:pt-7 pb-12 max-w-7xl w-full min-w-0">
         <Suspense
           fallback={
             <div className="p-12 flex items-center justify-center text-slate-400 gap-2">

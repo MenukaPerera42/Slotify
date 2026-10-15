@@ -1,8 +1,23 @@
+<p align="center">
+  <img src="public/branding/slotify-logo.png" alt="Slotify" width="360" />
+</p>
+
 # Slotify — Resource Reservation Management System
 
 A full-stack, enterprise-grade resource reservation management system developed for the **PrimeWave Lab Software Engineering Internship Technical Assessment**.
 
-The system enables organizations to manage physical and digital assets (conference rooms, laboratory workstations, shared hardware), schedule conflict-free bookings, track live availability, and prevent reservation clashes under concurrent usage.
+Slotify helps teams reserve shared rooms, workspaces, and equipment. Members can request and manage bookings; administrators manage resources, departments, approvals, and office schedules. PostgreSQL protects against conflicting reservations.
+
+## Demo Admin Credentials
+
+| Field | Value |
+| --- | --- |
+| Email | `admin@gmail.com` |
+| Password | `admin@123` |
+
+These **assessment demo credentials** were verified against the configured local demo database on 2026-10-15 and signed in successfully at `http://localhost:3000`. They have **not** been verified against the separate Neon staging Preview; its accounts are different. Do not assume this login works in another deployment.
+
+No working public deployment URL is verified for this repository. The earlier Vercel staging Preview now returns HTTP 410, so it is not listed as a live demo. The repository's GitHub URL has not been configured in this README.
 
 ---
 
@@ -67,9 +82,8 @@ Slotify/
 - **PostgreSQL**: `v14+`
 
 ### Installation
-1. Clone the repository and navigate into the workspace:
+1. From your local clone, navigate into the workspace:
    ```bash
-   git clone <repository-url>
    cd Slotify
    ```
 
@@ -135,7 +149,7 @@ After changing `prisma/schema.prisma`, stop the running Next.js dev server, appl
   - Auth.js credential login, server-side role checks, approval-ready status migration, and pending/approved overlap protection
 - [x] **Stage 4.1 — Public Member Sign-Up & Authentication UI** *(Completed)*
   - Member-only registration, shared rate limits, explicit demo credential management, and supplied logo integration
-- [ ] **Stage 5 — Booking Requests & Approval Workflow**
+- [x] **Stage 5 — Booking Requests & Approval Workflow** *(Completed)*
   - Member requests, admin approval/rejection, cancellation, and conflict-friendly errors
 
 ---
@@ -156,18 +170,18 @@ To intentionally reset an existing demo account, update its corresponding passwo
 | View reservations | All | Own |
 | Create/edit/deactivate resources | Yes | No |
 | View users and change roles | Yes | No |
-| Approve/reject requests | Stage 5 | No |
-| Submit/cancel own requests | No | Stage 5 |
+| Approve/reject requests | Yes | No |
+| Submit/cancel own requests | Yes, where authorized | Yes, for eligible own requests |
 
 Reservation statuses are `PENDING`, `APPROVED`, `REJECTED`, and `CANCELLED`. Six preexisting `CONFIRMED` records were migrated to `APPROVED` on the local database. PostgreSQL enforces `[startTime, endTime)` overlap exclusion for `PENDING` and `APPROVED`, valid time order, status transitions, and last-active-admin protection. Resource and user deletion is restricted when reservation history exists; inactive resources reject new pending or approved reservations. Application instants are stored in UTC (`timestamptz`); business presentation uses `Asia/Colombo` (Sri Lanka).
 
-Stage 5 should add booking and approval actions with server-side identity checks and translate PostgreSQL exclusion error `23P01` into a useful slot-conflict message.
+Booking and approval actions use server-side identity checks and translate PostgreSQL overlap conflicts into a slot-conflict message.
 
 ## Stage 4.1 sign-up and branding
 
 The supplied `public/logo.png` is used in the sidebar and authentication pages. It is a wide wordmark, so the existing valid favicon remains in use. Admin account creation is not exposed publicly; only an authorized admin can promote a member from Administration. Run `npm run db:setup-demo`, `npx prisma migrate deploy`, and `npm run db:seed` for a fresh local setup.
 
-With the app running on `http://localhost:3100`, run `npm run test:auth` to execute the Stage 4.1 integration suite. It creates and removes only synthetic test users and uses the configured local admin password without printing it.
+With the app running locally, run `npm run test:auth` to execute the Stage 4.1 integration suite. Set `SLOTIFY_TEST_URL` to that server's origin when it is not `http://localhost:3000`, and make sure `AUTH_URL` matches the server origin. The suite creates and removes synthetic test users with generated credentials.
 
 ## Stage 8C — final database ERD
 

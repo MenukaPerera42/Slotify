@@ -298,8 +298,8 @@ export default async function HomePage() {
                 </div>
 
                 {/* Mockup Footer */}
-                <div className="bg-slate-50 px-4 py-2.5 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
-                  <div className="flex items-center gap-3">
+                <div className="bg-slate-50 px-4 py-2.5 border-t border-slate-100 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500">
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1 min-w-0">
                     <span className="flex items-center gap-1.5">
                       <span className="h-2 w-2 rounded-full bg-blue-600" />
                       Engineering
@@ -313,7 +313,7 @@ export default async function HomePage() {
                       Pending Approval
                     </span>
                   </div>
-                  <span className="text-[11px] text-slate-400">
+                  <span className="text-[11px] text-slate-400 break-words">
                     Slotify Resource Management
                   </span>
                 </div>

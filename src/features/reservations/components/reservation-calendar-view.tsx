@@ -226,12 +226,12 @@ export function ReservationCalendarView({
   ];
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 min-w-0 max-w-full">
       {/* Top Bar: Date Navigator + Category Filters + Refresh */}
       <div className="bg-white rounded-2xl border border-[#E5E7EB] p-4 shadow-2xs space-y-3">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           {/* Left: Date Display & Today Button */}
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2 min-w-0">
             <Button
               variant="outline"
               size="sm"
@@ -258,8 +258,8 @@ export function ReservationCalendarView({
                 <ChevronRight className="h-4 w-4" />
               </button>
             </div>
-            <div className="ml-1">
-              <h3 className="text-sm font-bold text-slate-900">
+            <div className="w-full sm:w-auto sm:ml-1 min-w-0">
+              <h3 className="text-sm font-bold text-slate-900 break-words">
                 {formatColomboFullDate(selectedDate)}
               </h3>
               <p className="text-[11px] text-slate-400">

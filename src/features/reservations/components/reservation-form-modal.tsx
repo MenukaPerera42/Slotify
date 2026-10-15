@@ -425,7 +425,7 @@ export function ReservationFormModal({
       onClose={onClose}
       title="Request Reservation"
       description={`Specify reservation parameters in Asia/Colombo (${formatShiftHours(startMinute, durationMinutes)}).`}
-      className="max-w-2xl sm:max-w-[720px] w-full p-6 sm:p-7"
+      className="max-w-2xl sm:max-w-[720px] w-full p-4 sm:p-7"
     >
       <form onSubmit={handleSubmit} className="space-y-5">
         {errorMessage && (
@@ -436,8 +436,8 @@ export function ReservationFormModal({
         )}
 
         {/* Active Shift Policy Banner */}
-        <div className="p-3 rounded-xl bg-blue-50/70 border border-blue-200/80 text-xs flex items-center justify-between">
-          <div className="flex items-center gap-2">
+        <div className="p-3 rounded-xl bg-blue-50/70 border border-blue-200/80 text-xs flex flex-wrap items-center justify-between gap-2">
+          <div className="flex flex-wrap items-center gap-2 min-w-0">
             <Clock className="h-4 w-4 text-blue-600 shrink-0" />
             <span className="font-semibold text-blue-900">Active Policy:</span>
             <span className="text-blue-800 font-medium">
@@ -697,7 +697,7 @@ export function ReservationFormModal({
               <Clock className="h-4 w-4 text-blue-600" />
               <span>Time Slot ({formatShiftHours(startMinute, durationMinutes)})</span>
             </label>
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-1 min-[390px]:grid-cols-2 gap-2">
               <select
                 value={startTime}
                 onChange={(e) => setUserStartTime(e.target.value)}
@@ -731,7 +731,7 @@ export function ReservationFormModal({
         </div>
 
         {/* SECTION E: Availability & Validation Feedback */}
-        <div className="p-3 rounded-xl bg-slate-50 border border-slate-200/80 flex items-center justify-between text-xs">
+        <div className="p-3 rounded-xl bg-slate-50 border border-slate-200/80 flex flex-wrap items-center justify-between gap-2 text-xs">
           <div className="flex items-center gap-2">
             {isCheckingConflict ? (
               <>
@@ -762,13 +762,13 @@ export function ReservationFormModal({
         </div>
 
         {/* SECTION F: Confirmation Actions */}
-        <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-slate-100">
+        <div className="flex flex-col min-[390px]:flex-row min-[390px]:items-center min-[390px]:justify-end gap-2.5 pt-3 border-t border-slate-100">
           <Button
             type="button"
             variant="outline"
             onClick={onClose}
             disabled={isSubmitting}
-            className="rounded-xl text-xs h-9 px-4 border-slate-200 text-slate-700 hover:bg-slate-50"
+            className="rounded-xl text-xs h-9 w-full min-[390px]:w-auto px-4 border-slate-200 text-slate-700 hover:bg-slate-50"
           >
             Cancel
           </Button>
@@ -784,7 +784,7 @@ export function ReservationFormModal({
               (isAdmin && adminMode === "user" && (!targetUserId || !selectedDeptId)) ||
               (isAdmin && adminMode === "dept" && !selectedDeptId)
             }
-            className="rounded-xl text-xs h-9 px-5 bg-blue-600 hover:bg-blue-700 text-white font-semibold shadow-xs"
+            className="rounded-xl text-xs h-9 w-full min-[390px]:w-auto px-5 bg-blue-600 hover:bg-blue-700 text-white font-semibold shadow-xs"
           >
             {isSubmitting ? (
               <>

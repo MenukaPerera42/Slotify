@@ -25,7 +25,7 @@ export default async function NotificationsPage() {
         title="Notifications"
         description="Stay up to date with activity, approvals, and reminders across your reservations."
       />
-      <main className="flex-1 px-8 pb-12 max-w-7xl w-full space-y-6">
+      <main className="flex-1 px-4 sm:px-6 lg:px-8 pb-12 max-w-7xl w-full min-w-0 space-y-6">
         <NotificationsView
           initialNotifications={notifications}
           initialUnreadCount={unreadCount}

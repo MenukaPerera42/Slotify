@@ -94,15 +94,38 @@ export function ReservationsClient({
   const activeResourcesCount = summaryData.activeResources;
 
   return (
-    <div className="space-y-6">
-      {/* Top Action Bar & Stat Cards */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        {/* View Switcher Tabs */}
-        <div className="flex items-center gap-1.5 p-1 bg-white rounded-xl border border-[#E5E7EB] shadow-2xs">
+    <div className="space-y-6 min-w-0 max-w-full">
+      <header className="flex flex-wrap items-start justify-between gap-3 min-w-0">
+        <div className="min-w-0">
+          <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-slate-900">
+            {isAdmin ? "Reservation Management" : "My Reservations"}
+          </h1>
+          <p className="text-xs text-slate-500 mt-1 leading-relaxed max-w-2xl">
+            {isAdmin
+              ? "Manage organizational reservations, approvals, and resource schedules."
+              : "Schedule, track, and manage your room and equipment bookings."}
+          </p>
+        </div>
+        <Button
+          type="button"
+          size="sm"
+          onClick={() => {
+            setSelectedResourceId(undefined);
+            setIsManualModalOpen(true);
+          }}
+          className="rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-medium text-xs flex items-center gap-1.5 shadow-xs shrink-0"
+        >
+          <Plus className="h-4 w-4" />
+          <span>New Reservation</span>
+        </Button>
+      </header>
+
+      {/* View switcher */}
+        <div className="flex w-max max-w-full items-center gap-1.5 p-1 bg-white rounded-xl border border-[#E5E7EB] shadow-2xs overflow-x-auto overscroll-x-contain">
           <button
             type="button"
             onClick={() => handleTabChange("calendar")}
-            className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+            className={`flex shrink-0 items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all ${
               activeTab === "calendar"
                 ? "bg-blue-50 text-blue-700 shadow-2xs border border-blue-200"
                 : "text-slate-600 hover:text-slate-900 hover:bg-slate-50"
@@ -116,7 +139,7 @@ export function ReservationsClient({
             <button
               type="button"
               onClick={() => handleTabChange("approvals")}
-              className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all relative ${
+              className={`flex shrink-0 items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all relative ${
                 activeTab === "approvals"
                   ? "bg-blue-50 text-blue-700 shadow-2xs border border-blue-200"
                   : "text-slate-600 hover:text-slate-900 hover:bg-slate-50"
@@ -135,7 +158,7 @@ export function ReservationsClient({
           <button
             type="button"
             onClick={() => handleTabChange("list")}
-            className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+            className={`flex shrink-0 items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all ${
               activeTab === "list"
                 ? "bg-blue-50 text-blue-700 shadow-2xs border border-blue-200"
                 : "text-slate-600 hover:text-slate-900 hover:bg-slate-50"
@@ -147,23 +170,10 @@ export function ReservationsClient({
               ({totalCount})
             </span>
           </button>
-        </div>
-
-        {/* Primary CTA: + New Reservation */}
-        <Button
-          onClick={() => {
-            setSelectedResourceId(undefined);
-            setIsManualModalOpen(true);
-          }}
-          className="h-10 px-4 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-medium text-xs flex items-center gap-2 shadow-xs transition-colors shrink-0"
-        >
-          <Plus className="h-4 w-4" />
-          <span>New Reservation</span>
-        </Button>
       </div>
 
       {/* Metrics Row matching reference design card style */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 min-[390px]:grid-cols-2 md:grid-cols-4 gap-4">
         <div className="bg-white rounded-2xl border border-[#E5E7EB] p-4 shadow-2xs flex items-center gap-3.5">
           <div className="h-10 w-10 rounded-xl bg-blue-50 border border-blue-100 flex items-center justify-center text-blue-600 shadow-2xs shrink-0">
             <CalendarCheck2 className="h-5 w-5" />

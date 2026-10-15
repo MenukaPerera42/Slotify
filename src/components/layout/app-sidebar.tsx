@@ -64,7 +64,7 @@ export function AppSidebar({ user }: { user: { name: string; email: string; role
   return (
     <>
       {/* Mobile Top Navbar */}
-      <div className="lg:hidden flex items-center justify-between px-5 py-3.5 bg-white border-b border-[#E5E7EB] sticky top-0 z-30">
+      <div className="lg:hidden flex items-center justify-between px-4 sm:px-5 py-2.5 bg-white border-b border-[#E5E7EB] sticky top-0 z-30 pt-[max(0.625rem,env(safe-area-inset-top))]">
         <Link href="/dashboard" className="flex items-center gap-2">
           <SlotifyIcon className="h-7 w-7" priority />
           <span className="font-extrabold text-slate-900 text-lg tracking-tight">Slotify</span>
@@ -72,8 +72,9 @@ export function AppSidebar({ user }: { user: { name: string; email: string; role
         <button
           type="button"
           onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-          className="p-1.5 rounded-lg text-slate-600 hover:bg-slate-100"
+          className="h-11 w-11 flex items-center justify-center rounded-lg text-slate-600 hover:bg-slate-100"
           aria-label="Toggle navigation"
+          aria-expanded={mobileMenuOpen}
         >
           {mobileMenuOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
         </button>
@@ -90,7 +91,7 @@ export function AppSidebar({ user }: { user: { name: string; email: string; role
       {/* Sidebar (Desktop Sticky + Mobile Drawer) */}
       <aside
         className={cn(
-          "fixed top-0 bottom-0 left-0 z-40 w-56 bg-white border-r border-[#E5E7EB] flex flex-col justify-between transition-transform duration-200 ease-in-out lg:sticky lg:top-0 lg:h-screen lg:translate-x-0 shrink-0 select-none",
+          "fixed top-0 bottom-0 left-0 z-40 w-56 max-w-[85vw] h-dvh overflow-y-auto bg-white border-r border-[#E5E7EB] flex flex-col justify-between transition-transform duration-200 ease-in-out lg:sticky lg:top-0 lg:h-screen lg:translate-x-0 shrink-0 select-none",
           mobileMenuOpen ? "translate-x-0" : "-translate-x-full"
         )}
       >

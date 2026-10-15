@@ -23,7 +23,7 @@ export function DashboardSummaryCards({ summary }: DashboardSummaryCardsProps) {
   const isOrg = summary.scope === "ORGANIZATION";
 
   return (
-    <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+    <div className="grid grid-cols-1 min-[390px]:grid-cols-2 lg:grid-cols-4 gap-4">
       {/* Total Bookings */}
       <div className="bg-white rounded-2xl border border-[#E5E7EB] p-4 sm:p-4.5 shadow-2xs h-[100px] flex items-center gap-3.5 transition-all hover:border-slate-300">
         <div className="h-10 w-10 rounded-xl bg-blue-50 border border-blue-100 flex items-center justify-center text-blue-600 shadow-2xs shrink-0">

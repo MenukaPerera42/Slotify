@@ -83,7 +83,7 @@ export function DashboardMonthlyUsage({
                 onClick={() => onSelectDate(day.date)}
               >
                 {/* Floating Tooltip */}
-                <div className="absolute -top-9 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-20 whitespace-nowrap bg-slate-900 text-white text-[10px] font-semibold px-2 py-0.5 rounded shadow-lg">
+                <div className="hidden lg:block absolute -top-9 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-20 whitespace-nowrap bg-slate-900 text-white text-[10px] font-semibold px-2 py-0.5 rounded shadow-lg">
                   {day.date}: {day.bookedHours.toFixed(1)} hrs
                 </div>
 

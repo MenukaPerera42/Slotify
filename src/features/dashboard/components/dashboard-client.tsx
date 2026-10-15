@@ -272,11 +272,11 @@ export function DashboardClient({
   return (
     <div className="flex-1 flex flex-col min-w-0">
       {/* Role-Aware Header matching approved Slotify layout */}
-      <header className="px-8 pt-7 pb-4">
+      <header className="px-4 sm:px-6 lg:px-8 pt-6 sm:pt-7 pb-4 min-w-0">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 max-w-7xl">
-          <div>
-            <div className="flex items-center gap-2.5">
-              <h1 className="text-2xl font-bold tracking-tight text-slate-900">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2.5">
+              <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-slate-900">
                 {isAdmin ? "Operations Dashboard" : "My Dashboard"}
               </h1>
               <span
@@ -300,7 +300,7 @@ export function DashboardClient({
               </span>
             </div>
 
-            <div className="flex items-center gap-2 text-xs text-slate-500 mt-1">
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-slate-500 mt-1">
               <span>Welcome back, <strong className="text-slate-800">{user.name}</strong></span>
               <span>•</span>
               <span className="flex items-center gap-1 text-slate-400">
@@ -310,11 +310,11 @@ export function DashboardClient({
             </div>
           </div>
 
-          <div className="flex items-center gap-2.5">
-            <Link href="/resources">
+          <div className="flex flex-col min-[390px]:flex-row min-[390px]:flex-wrap items-stretch min-[390px]:items-center gap-2.5 min-w-0">
+            <Link href="/resources" className="w-full min-[390px]:w-auto">
               <Button
                 variant="outline"
-                className="h-9 px-3.5 rounded-xl border-[#E5E7EB] text-slate-700 hover:text-slate-900 text-xs font-semibold flex items-center gap-1.5 shadow-2xs"
+                className="h-9 w-full min-[390px]:w-auto px-3.5 rounded-xl border-[#E5E7EB] text-slate-700 hover:text-slate-900 text-xs font-semibold flex items-center gap-1.5 shadow-2xs"
               >
                 <Layers className="h-4 w-4 text-slate-500" />
                 <span>Browse Resources</span>
@@ -323,7 +323,7 @@ export function DashboardClient({
 
             <Button
               onClick={() => setIsBookingModalOpen(true)}
-              className="h-9 px-4 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs flex items-center gap-1.5 shadow-xs transition-colors"
+              className="h-9 w-full min-[390px]:w-auto px-4 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs flex items-center gap-1.5 shadow-xs transition-colors"
             >
               <Plus className="h-4 w-4" />
               <span>New Reservation</span>
@@ -333,7 +333,7 @@ export function DashboardClient({
       </header>
 
       {/* Main Content Area */}
-      <main className="flex-1 px-8 pb-12 max-w-7xl w-full space-y-6">
+      <main className="flex-1 px-4 sm:px-6 lg:px-8 pb-12 max-w-7xl w-full min-w-0 space-y-6">
         {/* 1. All-time Stat Cards */}
         <DashboardSummaryCards summary={summary} />
 

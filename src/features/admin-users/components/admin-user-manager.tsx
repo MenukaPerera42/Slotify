@@ -973,7 +973,7 @@ export function AdminUserManager({
         description="Create a new user account with MEMBER role and assign an organizational department."
       >
         <form onSubmit={handleAddMember} className="space-y-4 pt-1">
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 min-[390px]:grid-cols-2 gap-3">
             <div>
               <label className="text-xs font-bold text-slate-700 block mb-1">
                 First Name <span className="text-rose-500">*</span>
@@ -1116,7 +1116,7 @@ export function AdminUserManager({
         description={`Update profile information for ${editingUser?.name}.`}
       >
         <form onSubmit={handleEditProfile} className="space-y-4 pt-1">
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 min-[390px]:grid-cols-2 gap-3">
             <div>
               <label className="text-xs font-bold text-slate-700 block mb-1">
                 First Name
