@@ -95,7 +95,7 @@ export function ReservationsClient({
 
   return (
     <div className="space-y-6 min-w-0 max-w-full">
-      <header className="flex flex-wrap items-start justify-between gap-3 min-w-0">
+      <header className="min-w-0">
         <div className="min-w-0">
           <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-slate-900">
             {isAdmin ? "Reservation Management" : "My Reservations"}
@@ -106,21 +106,10 @@ export function ReservationsClient({
               : "Schedule, track, and manage your room and equipment bookings."}
           </p>
         </div>
-        <Button
-          type="button"
-          size="sm"
-          onClick={() => {
-            setSelectedResourceId(undefined);
-            setIsManualModalOpen(true);
-          }}
-          className="rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-medium text-xs flex items-center gap-1.5 shadow-xs shrink-0"
-        >
-          <Plus className="h-4 w-4" />
-          <span>New Reservation</span>
-        </Button>
       </header>
 
-      {/* View switcher */}
+      {/* Calendar view switcher and booking action */}
+      <div className="flex flex-wrap items-center justify-between gap-3 min-w-0">
         <div className="flex w-max max-w-full items-center gap-1.5 p-1 bg-white rounded-xl border border-[#E5E7EB] shadow-2xs overflow-x-auto overscroll-x-contain">
           <button
             type="button"
@@ -170,6 +159,19 @@ export function ReservationsClient({
               ({totalCount})
             </span>
           </button>
+        </div>
+        <Button
+          type="button"
+          size="sm"
+          onClick={() => {
+            setSelectedResourceId(undefined);
+            setIsManualModalOpen(true);
+          }}
+          className="ml-auto rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-medium text-xs flex items-center gap-1.5 shadow-xs shrink-0"
+        >
+          <Plus className="h-4 w-4" />
+          <span>New Reservation</span>
+        </Button>
       </div>
 
       {/* Metrics Row matching reference design card style */}
