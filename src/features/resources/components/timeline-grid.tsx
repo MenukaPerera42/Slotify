@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import {
   Building2,
   Monitor,
@@ -21,7 +21,10 @@ import {
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useToast } from "@/components/ui/toast";
-import { correctReservationDepartmentAction } from "@/features/reservations/actions/reservation-actions";
+import {
+  correctReservationDepartmentAction,
+  updateReservationTimeAction,
+} from "@/features/reservations/actions/reservation-actions";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
@@ -29,6 +32,8 @@ import {
   formatColomboInterval,
   formatColomboDate,
   formatColomboFullDate,
+  formatColomboTime,
+  createColomboISO,
 } from "@/features/reservations/utils/client-date";
 import {
   getDepartmentColorScheme,
@@ -49,7 +54,14 @@ export interface ReservationOccupancy {
   title?: string;
   reservationIds?: string[];
   user?: { name: string; email: string };
-  bookings?: { id: string; title: string; userId: string | null }[];
+  bookings?: {
+    id: string;
+    title: string;
+    userId: string | null;
+    startTime?: Date | string;
+    endTime?: Date | string;
+    updatedAt?: Date | string;
+  }[];
   outsideEffectiveWindow?: boolean;
 }
 
@@ -81,6 +93,7 @@ export interface TimelineGridProps {
   onSelectSlot?: (resourceId: string, slotTime: string) => void;
   onNewReservation?: () => void;
   onBrowseResources?: () => void;
+  onRefresh?: () => void;
   isLoading?: boolean;
 }
 
@@ -94,16 +107,73 @@ export function TimelineGrid({
   onSelectSlot,
   onNewReservation,
   onBrowseResources,
+  onRefresh,
   isLoading = false,
 }: TimelineGridProps) {
   const router = useRouter();
   const toast = useToast();
   const scrollContainerRef = useRef<HTMLDivElement>(null);
 
+  // Helper to extract Colombo HH:MM time
+  const getColomboHHMM = (date: Date | string): string => {
+    const d = typeof date === "string" ? new Date(date) : date;
+    return new Intl.DateTimeFormat("en-GB", {
+      timeZone: "Asia/Colombo",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    }).format(d);
+  };
+
   // Detail inspection modal state
   const [inspectBooking, setInspectBooking] = useState<{
     booking: ReservationOccupancy;
     resource: TimelineResourceItem;
+  } | null>(null);
+
+  // Drag state for resizing reservation start/end times
+  const [dragState, setDragState] = useState<{
+    bookingId: string;
+    reservationId: string;
+    resource: TimelineResourceItem;
+    booking: ReservationOccupancy;
+    edge: "start" | "end";
+    startX: number;
+    initialStartMs: number;
+    initialEndMs: number;
+    proposedStartMs: number;
+    proposedEndMs: number;
+    hasMoved: boolean;
+    expectedUpdatedAt: string;
+  } | null>(null);
+
+  // Modal to confirm time adjustment after dragging
+  const [confirmModalState, setConfirmModalState] = useState<{
+    isOpen: boolean;
+    reservationId: string;
+    resourceName: string;
+    title?: string;
+    originalStart: Date;
+    originalEnd: Date;
+    proposedStart: Date;
+    proposedEnd: Date;
+    expectedUpdatedAt: string;
+    isSubmitting: boolean;
+    error: string | null;
+  } | null>(null);
+
+  // Accessible fallback modal for keyboard/touch/individual grouped booking editing
+  const [accessibleEditModalState, setAccessibleEditModalState] = useState<{
+    isOpen: boolean;
+    reservationId: string;
+    resourceName: string;
+    title?: string;
+    dateStr: string;
+    startTimeStr: string;
+    endTimeStr: string;
+    expectedUpdatedAt: string;
+    isSubmitting: boolean;
+    error: string | null;
   } | null>(null);
 
   // Department correction form state inside inspection modal
@@ -192,10 +262,16 @@ export function TimelineGrid({
    */
   const computePosition = (
     startTime: Date | string,
-    endTime: Date | string
+    endTime: Date | string,
+    bookingKey?: string
   ) => {
-    const s = new Date(startTime).getTime();
-    const e = new Date(endTime).getTime();
+    let s = new Date(startTime).getTime();
+    let e = new Date(endTime).getTime();
+
+    if (dragState && bookingKey && dragState.bookingId === bookingKey) {
+      s = dragState.proposedStartMs;
+      e = dragState.proposedEndMs;
+    }
 
     // Clip to visible window
     const visibleStart = Math.max(s, timelineStartUtc);
@@ -213,6 +289,269 @@ export function TimelineGrid({
       startsBefore: s < timelineStartUtc,
       endsAfter: e > timelineEndUtc,
     };
+  };
+
+  // Initiate pointer drag on left or right handle
+  const handleStartDrag = (
+    e: React.PointerEvent,
+    booking: ReservationOccupancy,
+    resource: TimelineResourceItem,
+    edge: "start" | "end"
+  ) => {
+    if (!isAdmin) return;
+    const count = booking.reservationIds?.length ?? 1;
+    if (count > 1) return; // Grouped reservations must be edited individually through details modal
+
+    e.stopPropagation();
+    e.preventDefault();
+
+    const reservationId = booking.reservationIds?.[0] || booking.id || "";
+    const bookingDetails = booking.bookings?.[0];
+    const expectedUpdatedAt = bookingDetails?.updatedAt
+      ? new Date(bookingDetails.updatedAt).toISOString()
+      : (booking as { updatedAt?: Date | string }).updatedAt
+      ? new Date((booking as { updatedAt?: Date | string }).updatedAt!).toISOString()
+      : new Date().toISOString();
+
+    const initialStartMs = new Date(booking.startTime).getTime();
+    const initialEndMs = new Date(booking.endTime).getTime();
+
+    try {
+      (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    } catch {}
+
+    const bookingKey = booking.id || booking.reservationIds?.[0] || `${booking.resourceId}`;
+
+    setDragState({
+      bookingId: bookingKey,
+      reservationId,
+      resource,
+      booking,
+      edge,
+      startX: e.clientX,
+      initialStartMs,
+      initialEndMs,
+      proposedStartMs: initialStartMs,
+      proposedEndMs: initialEndMs,
+      hasMoved: false,
+      expectedUpdatedAt,
+    });
+  };
+
+  useEffect(() => {
+    if (!dragState) return;
+
+    const onPointerMove = (e: MouseEvent | PointerEvent) => {
+      const container = document.querySelector('[data-timeline-container="true"]');
+      const containerWidth = container?.getBoundingClientRect().width || 1000;
+      const deltaX = e.clientX - dragState.startX;
+      const deltaMs = (deltaX / containerWidth) * totalTimelineMs;
+      const stepMs = 30 * 60 * 1000;
+
+      let hasMoved = dragState.hasMoved;
+      if (Math.abs(deltaX) > 4) {
+        hasMoved = true;
+      }
+
+      if (dragState.edge === "start") {
+        const rawMs = dragState.initialStartMs + deltaMs;
+        const snappedMs = timelineStartUtc + Math.round((rawMs - timelineStartUtc) / stepMs) * stepMs;
+        const clampedMs = Math.max(timelineStartUtc, Math.min(dragState.initialEndMs - stepMs, snappedMs));
+        setDragState((prev) => (prev ? { ...prev, proposedStartMs: clampedMs, hasMoved } : null));
+      } else {
+        const rawMs = dragState.initialEndMs + deltaMs;
+        const snappedMs = timelineStartUtc + Math.round((rawMs - timelineStartUtc) / stepMs) * stepMs;
+        const clampedMs = Math.min(timelineEndUtc, Math.max(dragState.initialStartMs + stepMs, snappedMs));
+        setDragState((prev) => (prev ? { ...prev, proposedEndMs: clampedMs, hasMoved } : null));
+      }
+    };
+
+    const onPointerUp = () => {
+      const {
+        hasMoved,
+        proposedStartMs,
+        proposedEndMs,
+        initialStartMs,
+        initialEndMs,
+        reservationId,
+        resource,
+        booking,
+        expectedUpdatedAt,
+      } = dragState;
+
+      setDragState(null);
+
+      if (hasMoved && (proposedStartMs !== initialStartMs || proposedEndMs !== initialEndMs)) {
+        setConfirmModalState({
+          isOpen: true,
+          reservationId,
+          resourceName: resource.name,
+          title: booking.title,
+          originalStart: new Date(initialStartMs),
+          originalEnd: new Date(initialEndMs),
+          proposedStart: new Date(proposedStartMs),
+          proposedEnd: new Date(proposedEndMs),
+          expectedUpdatedAt,
+          isSubmitting: false,
+          error: null,
+        });
+      }
+    };
+
+    window.addEventListener("pointermove", onPointerMove);
+    window.addEventListener("pointerup", onPointerUp);
+    window.addEventListener("mousemove", onPointerMove);
+    window.addEventListener("mouseup", onPointerUp);
+
+    return () => {
+      window.removeEventListener("pointermove", onPointerMove);
+      window.removeEventListener("pointerup", onPointerUp);
+      window.removeEventListener("mousemove", onPointerMove);
+      window.removeEventListener("mouseup", onPointerUp);
+    };
+  }, [dragState, timelineStartUtc, timelineEndUtc, totalTimelineMs]);
+
+  // Commit proposed drag time change to database
+  const handleConfirmTimeChange = async () => {
+    if (!confirmModalState) return;
+
+    setConfirmModalState((prev) => (prev ? { ...prev, isSubmitting: true, error: null } : null));
+
+    try {
+      const res = await updateReservationTimeAction({
+        reservationId: confirmModalState.reservationId,
+        startTime: confirmModalState.proposedStart.toISOString(),
+        endTime: confirmModalState.proposedEnd.toISOString(),
+        expectedUpdatedAt: confirmModalState.expectedUpdatedAt,
+      });
+
+      if (res.success) {
+        toast.success("Reservation time updated successfully.");
+        setConfirmModalState(null);
+        onRefresh?.();
+        router.refresh();
+      } else {
+        let errorMsg = res.error || "Failed to update reservation time.";
+        if (res.code === "SLOT_CONFLICT") {
+          errorMsg = "SLOT_CONFLICT: The proposed time interval overlaps another reservation for this resource.";
+        } else if (res.code === "OUTSIDE_SHIFT_HOURS") {
+          errorMsg = `OUTSIDE_SHIFT_HOURS: The proposed time is outside the allowed office shift (${shiftHoursLabel}).`;
+        } else if (res.code === "STALE_UPDATE") {
+          errorMsg = "STALE_UPDATE: This reservation was modified by another user. Refreshing schedule...";
+          setTimeout(() => {
+            onRefresh?.();
+            router.refresh();
+          }, 1500);
+        }
+        setConfirmModalState((prev) => (prev ? { ...prev, isSubmitting: false, error: errorMsg } : null));
+        toast.error(errorMsg);
+      }
+    } catch {
+      setConfirmModalState((prev) => (prev ? { ...prev, isSubmitting: false, error: "Network error while saving." } : null));
+      toast.error("Failed to update reservation time.");
+    }
+  };
+
+  // Open accessible edit times modal for a single booking
+  const openAccessibleEditModal = (
+    booking: ReservationOccupancy,
+    resource: TimelineResourceItem
+  ) => {
+    const reservationId = booking.reservationIds?.[0] || booking.id || "";
+    const bookingDetails = booking.bookings?.[0];
+    const expectedUpdatedAt = bookingDetails?.updatedAt
+      ? new Date(bookingDetails.updatedAt).toISOString()
+      : (booking as { updatedAt?: Date | string }).updatedAt
+      ? new Date((booking as { updatedAt?: Date | string }).updatedAt!).toISOString()
+      : new Date().toISOString();
+
+    setAccessibleEditModalState({
+      isOpen: true,
+      reservationId,
+      resourceName: resource.name,
+      title: booking.title,
+      dateStr: selectedDate,
+      startTimeStr: getColomboHHMM(booking.startTime),
+      endTimeStr: getColomboHHMM(booking.endTime),
+      expectedUpdatedAt,
+      isSubmitting: false,
+      error: null,
+    });
+  };
+
+  // Open accessible edit times modal for an individual segment in a grouped booking
+  const openAccessibleEditModalForSegment = (
+    b: { id: string; title: string; startTime?: Date | string; endTime?: Date | string; updatedAt?: Date | string },
+    resource: TimelineResourceItem
+  ) => {
+    const startIso = b.startTime || inspectBooking?.booking.startTime || new Date();
+    const endIso = b.endTime || inspectBooking?.booking.endTime || new Date();
+    const expectedUpdatedAt = b.updatedAt
+      ? new Date(b.updatedAt).toISOString()
+      : new Date().toISOString();
+
+    setAccessibleEditModalState({
+      isOpen: true,
+      reservationId: b.id,
+      resourceName: resource.name,
+      title: b.title,
+      dateStr: selectedDate,
+      startTimeStr: getColomboHHMM(startIso),
+      endTimeStr: getColomboHHMM(endIso),
+      expectedUpdatedAt,
+      isSubmitting: false,
+      error: null,
+    });
+  };
+
+  // Save accessible edit modal time changes
+  const handleSaveAccessibleEdit = async () => {
+    if (!accessibleEditModalState) return;
+
+    const startIso = createColomboISO(accessibleEditModalState.dateStr, accessibleEditModalState.startTimeStr);
+    const endIso = createColomboISO(accessibleEditModalState.dateStr, accessibleEditModalState.endTimeStr);
+
+    if (new Date(startIso).getTime() >= new Date(endIso).getTime()) {
+      setAccessibleEditModalState((prev) => (prev ? { ...prev, error: "End time must be after start time." } : null));
+      return;
+    }
+
+    setAccessibleEditModalState((prev) => (prev ? { ...prev, isSubmitting: true, error: null } : null));
+
+    try {
+      const res = await updateReservationTimeAction({
+        reservationId: accessibleEditModalState.reservationId,
+        startTime: startIso,
+        endTime: endIso,
+        expectedUpdatedAt: accessibleEditModalState.expectedUpdatedAt,
+      });
+
+      if (res.success) {
+        toast.success("Reservation time updated successfully.");
+        setAccessibleEditModalState(null);
+        setInspectBooking(null);
+        onRefresh?.();
+        router.refresh();
+      } else {
+        let errorMsg = res.error || "Failed to update reservation time.";
+        if (res.code === "SLOT_CONFLICT") {
+          errorMsg = "SLOT_CONFLICT: The new interval overlaps another reservation for this resource.";
+        } else if (res.code === "OUTSIDE_SHIFT_HOURS") {
+          errorMsg = `OUTSIDE_SHIFT_HOURS: The new interval must fit within the active office shift (${shiftHoursLabel}).`;
+        } else if (res.code === "STALE_UPDATE") {
+          errorMsg = "STALE_UPDATE: This reservation was modified by another user. Refreshing schedule...";
+          setTimeout(() => {
+            onRefresh?.();
+            router.refresh();
+          }, 1500);
+        }
+        setAccessibleEditModalState((prev) => (prev ? { ...prev, isSubmitting: false, error: errorMsg } : null));
+        toast.error(errorMsg);
+      }
+    } catch {
+      setAccessibleEditModalState((prev) => (prev ? { ...prev, isSubmitting: false, error: "Network error while saving." } : null));
+      toast.error("Failed to update reservation time.");
+    }
   };
 
   /**
@@ -492,7 +831,7 @@ export function TimelineGrid({
                       </div>
 
                       {/* Right Columns: Continuous Timeline Container */}
-                      <div className="flex-1 relative h-14 bg-white">
+                      <div className="flex-1 relative h-14 bg-white" data-timeline-container="true">
                         {/* 1. Underlying 30-min Grid Cells for Click-to-Book */}
                         <div
                           className="absolute inset-0 grid divide-x divide-[#E5E7EB]"
@@ -539,9 +878,14 @@ export function TimelineGrid({
                         {/* 2. Overlaid Continuous Reservation Blocks */}
                         <div className="absolute inset-0 pointer-events-none p-1.5 flex items-center">
                           {resourceBookings.map((booking, bIdx) => {
+                            const bookingKey =
+                              booking.id ||
+                              booking.reservationIds?.[0] ||
+                              `${booking.resourceId}-${bIdx}`;
                             const pos = computePosition(
                               booking.startTime,
-                              booking.endTime
+                              booking.endTime,
+                              bookingKey
                             );
                             if (!pos) return null;
 
@@ -562,13 +906,21 @@ export function TimelineGrid({
                             const isNarrow = pos.width < 10.0;
                             const isVeryNarrow = pos.width < 5.0;
 
+                            const isDraggingThis =
+                              dragState?.bookingId === bookingKey;
+
                             const statusLabel = isPending
                               ? "Pending Approval"
                               : "Reserved";
-                            const intervalStr = formatColomboInterval(
-                              booking.startTime,
-                              booking.endTime
-                            );
+                            const intervalStr = isDraggingThis
+                              ? formatColomboInterval(
+                                  new Date(dragState.proposedStartMs),
+                                  new Date(dragState.proposedEndMs)
+                                )
+                              : formatColomboInterval(
+                                  booking.startTime,
+                                  booking.endTime
+                                );
 
                             const tooltipText = [
                               `${statusLabel} · ${intervalStr}`,
@@ -586,91 +938,166 @@ export function TimelineGrid({
                               isAdmin && booking.user?.name
                                 ? `User: ${booking.user.name}`
                                 : null,
-                              pos.startsBefore ? `Starts before ${shiftHoursLabel.split("–")[0]}` : null,
-                              pos.endsAfter ? `Extends after ${shiftHoursLabel.split("–")[1]}` : null,
+                              isAdmin && !isGrouped
+                                ? "Drag handles to adjust times"
+                                : null,
                               "Click to inspect details",
                             ]
                               .filter(Boolean)
                               .join(" · ");
 
                             return (
-                              <button
-                                key={
-                                  booking.id || `${booking.resourceId}-${bIdx}`
-                                }
-                                type="button"
-                                onClick={() =>
-                                  setInspectBooking({
-                                    booking,
-                                    resource: res,
-                                  })
-                                }
-                                className={cn(
-                                  "absolute top-1.5 bottom-1.5 rounded-lg border shadow-2xs pointer-events-auto transition-all select-none overflow-hidden flex items-center px-1.5 py-0.5 z-10 cursor-pointer text-left hover:brightness-95 focus:outline-none focus:ring-2 focus:ring-blue-500",
-                                  isPending && "border-amber-400 border-dashed"
-                                )}
+                              <div
+                                key={bookingKey}
+                                className="absolute top-1.5 bottom-1.5 pointer-events-auto"
                                 style={{
                                   left: `${pos.left}%`,
                                   width: `${pos.width}%`,
-                                  backgroundColor: colorScheme.bg,
-                                  borderColor: isPending
-                                    ? "#F59E0B"
-                                    : colorScheme.border,
-                                  color: colorScheme.text,
                                 }}
-                                title={tooltipText}
                               >
-                                <div className="flex items-center justify-between gap-1 w-full min-w-0">
-                                  {/* Left: Status Indicator + Department Badge + Title */}
-                                  <div className="flex items-center gap-1.5 min-w-0 truncate">
-                                    {isPending ? (
-                                      <span className="h-2 w-2 rounded-full bg-amber-500 ring-2 ring-amber-300 animate-pulse shrink-0" />
-                                    ) : (
-                                      <span className="h-2 w-2 rounded-full bg-emerald-500 shrink-0" />
-                                    )}
-
-                                    <span
-                                      className="text-[9px] font-bold px-1.5 py-0.2 rounded shrink-0 shadow-2xs border tracking-tight"
-                                      style={{
-                                        backgroundColor: colorScheme.badgeBg,
-                                        borderColor: colorScheme.badgeBorder,
-                                        color: colorScheme.badgeText,
-                                      }}
-                                    >
-                                      {isNarrow
-                                        ? isLegacy
-                                          ? "UNASSIGNED"
-                                          : (dept?.code || colorScheme.code || "DEP").slice(0, 4)
-                                        : isLegacy
-                                        ? "Legacy / Unassigned"
-                                        : dept?.code || colorScheme.code}
+                                {/* Floating Live Time Drag Preview */}
+                                {isDraggingThis && (
+                                  <div className="absolute -top-7 left-1/2 -translate-x-1/2 bg-slate-900 text-white text-[10px] font-bold px-2 py-0.5 rounded-md shadow-md pointer-events-none z-40 whitespace-nowrap flex items-center gap-1 ring-1 ring-white/20">
+                                    <Clock className="h-3 w-3 text-blue-400" />
+                                    <span>
+                                      {formatColomboInterval(
+                                        new Date(dragState.proposedStartMs),
+                                        new Date(dragState.proposedEndMs)
+                                      )}
                                     </span>
+                                  </div>
+                                )}
 
-                                    {!isVeryNarrow && (
-                                      <span className="text-[10px] font-bold truncate">
-                                        {isAdmin && booking.title
-                                          ? booking.title
-                                          : statusLabel}
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    if (dragState?.hasMoved) return;
+                                    setInspectBooking({
+                                      booking,
+                                      resource: res,
+                                    });
+                                  }}
+                                  className={cn(
+                                    "absolute inset-0 rounded-lg border shadow-2xs transition-all select-none overflow-hidden flex items-center px-1.5 py-0.5 z-10 cursor-pointer text-left hover:brightness-95 focus:outline-none focus:ring-2 focus:ring-blue-500 group/block",
+                                    isPending && "border-amber-400 border-dashed",
+                                    isDraggingThis &&
+                                      "ring-2 ring-blue-500 z-30 opacity-95 shadow-md"
+                                  )}
+                                  style={{
+                                    backgroundColor: colorScheme.bg,
+                                    borderColor: isPending
+                                      ? "#F59E0B"
+                                      : colorScheme.border,
+                                    color: colorScheme.text,
+                                  }}
+                                  title={tooltipText}
+                                >
+                                  {/* Left Resize Handle (Start Time) - Admin & Single Only */}
+                                  {isAdmin && !isGrouped && (
+                                    <div
+                                      role="slider"
+                                      tabIndex={0}
+                                      aria-label="Resize start time"
+                                      aria-valuenow={new Date(booking.startTime).getTime()}
+                                      aria-valuemin={timelineStartUtc}
+                                      aria-valuemax={new Date(booking.endTime).getTime() - 30 * 60 * 1000}
+                                      aria-valuetext={formatColomboTime(booking.startTime)}
+                                      title="Drag to resize start time (or press Enter to edit times)"
+                                      onPointerDown={(e) =>
+                                        handleStartDrag(e, booking, res, "start")
+                                      }
+                                      onKeyDown={(e) => {
+                                        if (e.key === "Enter" || e.key === " ") {
+                                          e.stopPropagation();
+                                          e.preventDefault();
+                                          openAccessibleEditModal(booking, res);
+                                        }
+                                      }}
+                                      className="absolute left-0 top-0 bottom-0 w-3 hover:w-3.5 z-20 cursor-ew-resize flex items-center justify-center opacity-0 group-hover/block:opacity-100 focus:opacity-100 bg-black/10 hover:bg-black/20 transition-all select-none rounded-l-lg"
+                                    >
+                                      <div className="h-4 w-1 rounded-full bg-white shadow-xs" />
+                                    </div>
+                                  )}
+
+                                  <div className="flex items-center justify-between gap-1 w-full min-w-0 px-1">
+                                    {/* Left: Status Indicator + Department Badge + Title */}
+                                    <div className="flex items-center gap-1.5 min-w-0 truncate">
+                                      {isPending ? (
+                                        <span className="h-2 w-2 rounded-full bg-amber-500 ring-2 ring-amber-300 animate-pulse shrink-0" />
+                                      ) : (
+                                        <span className="h-2 w-2 rounded-full bg-emerald-500 shrink-0" />
+                                      )}
+
+                                      <span
+                                        className="text-[9px] font-bold px-1.5 py-0.2 rounded shrink-0 shadow-2xs border tracking-tight"
+                                        style={{
+                                          backgroundColor: colorScheme.badgeBg,
+                                          borderColor: colorScheme.badgeBorder,
+                                          color: colorScheme.badgeText,
+                                        }}
+                                      >
+                                        {isNarrow
+                                          ? isLegacy
+                                            ? "UNASSIGNED"
+                                            : (dept?.code || colorScheme.code || "DEP").slice(0, 4)
+                                          : isLegacy
+                                          ? "Legacy / Unassigned"
+                                          : dept?.code || colorScheme.code}
                                       </span>
-                                    )}
+
+                                      {!isVeryNarrow && (
+                                        <span className="text-[10px] font-bold truncate">
+                                          {isAdmin && booking.title
+                                            ? booking.title
+                                            : statusLabel}
+                                        </span>
+                                      )}
+                                    </div>
+
+                                    {/* Right: Group Count + Time Interval */}
+                                    <div className="flex items-center gap-1 shrink-0 text-[9px] font-semibold opacity-90">
+                                      {isGrouped && (
+                                        <span className="inline-flex items-center gap-0.5 px-1 py-0.2 rounded bg-white/90 text-slate-800 text-[8px] font-bold border border-slate-200 shadow-2xs">
+                                          <Layers className="h-2.5 w-2.5" />
+                                          {count}
+                                        </span>
+                                      )}
+                                      {!isNarrow && (
+                                        <span className="hidden sm:inline truncate">
+                                          {intervalStr}
+                                        </span>
+                                      )}
+                                    </div>
                                   </div>
 
-                                  {/* Right: Group Count + Time Interval */}
-                                  <div className="flex items-center gap-1 shrink-0 text-[9px] font-semibold opacity-90">
-                                    {isGrouped && (
-                                      <span className="inline-flex items-center gap-0.5 px-1 py-0.2 rounded bg-white/90 text-slate-800 text-[8px] font-bold border border-slate-200 shadow-2xs">
-                                        <Layers className="h-2.5 w-2.5" />
-                                        {count}
-                                      </span>
-                                    )}
-                                    {!isNarrow && (
-                                      <span className="hidden sm:inline truncate">
-                                        {intervalStr}
-                                      </span>
-                                    )}
-                                  </div>
-                                </div>
-                              </button>
+                                  {/* Right Resize Handle (End Time) - Admin & Single Only */}
+                                  {isAdmin && !isGrouped && (
+                                    <div
+                                      role="slider"
+                                      tabIndex={0}
+                                      aria-label="Resize end time"
+                                      aria-valuenow={new Date(booking.endTime).getTime()}
+                                      aria-valuemin={new Date(booking.startTime).getTime() + 30 * 60 * 1000}
+                                      aria-valuemax={timelineEndUtc}
+                                      aria-valuetext={formatColomboTime(booking.endTime)}
+                                      title="Drag to resize end time (or press Enter to edit times)"
+                                      onPointerDown={(e) =>
+                                        handleStartDrag(e, booking, res, "end")
+                                      }
+                                      onKeyDown={(e) => {
+                                        if (e.key === "Enter" || e.key === " ") {
+                                          e.stopPropagation();
+                                          e.preventDefault();
+                                          openAccessibleEditModal(booking, res);
+                                        }
+                                      }}
+                                      className="absolute right-0 top-0 bottom-0 w-3 hover:w-3.5 z-20 cursor-ew-resize flex items-center justify-center opacity-0 group-hover/block:opacity-100 focus:opacity-100 bg-black/10 hover:bg-black/20 transition-all select-none rounded-r-lg"
+                                    >
+                                      <div className="h-4 w-1 rounded-full bg-white shadow-xs" />
+                                    </div>
+                                  )}
+                                </button>
+                              </div>
                             );
                           })}
                         </div>
@@ -746,19 +1173,38 @@ export function TimelineGrid({
             </div>
 
             {/* Time Interval */}
-            <div className="flex items-center gap-2 p-3 rounded-xl bg-blue-50/60 border border-blue-100 text-blue-900">
-              <Clock className="h-4 w-4 text-blue-600 shrink-0" />
-              <div className="min-w-0">
-                <span className="font-bold">
-                  {formatColomboInterval(
-                    inspectBooking.booking.startTime,
-                    inspectBooking.booking.endTime
-                  )}
-                </span>
-                <span className="text-[10px] text-blue-700/80 block">
-                  Asia/Colombo Standard Time (UTC+05:30)
-                </span>
+            <div className="flex items-center justify-between p-3 rounded-xl bg-blue-50/60 border border-blue-100 text-blue-900">
+              <div className="flex items-center gap-2 min-w-0">
+                <Clock className="h-4 w-4 text-blue-600 shrink-0" />
+                <div className="min-w-0">
+                  <span className="font-bold block truncate">
+                    {formatColomboInterval(
+                      inspectBooking.booking.startTime,
+                      inspectBooking.booking.endTime
+                    )}
+                  </span>
+                  <span className="text-[10px] text-blue-700/80 block">
+                    Asia/Colombo Standard Time (UTC+05:30)
+                  </span>
+                </div>
               </div>
+              {isAdmin && (inspectBooking.booking.reservationIds?.length ?? 1) <= 1 && (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() =>
+                    openAccessibleEditModal(
+                      inspectBooking.booking,
+                      inspectBooking.resource
+                    )
+                  }
+                  className="h-7 px-2.5 text-xs font-semibold border-blue-200 text-blue-700 hover:bg-blue-100/60 shrink-0"
+                >
+                  <Edit3 className="h-3 w-3 mr-1" />
+                  Edit Times
+                </Button>
+              )}
             </div>
 
             {/* Admin-only Detailed Bookings & Ownership */}
@@ -793,21 +1239,48 @@ export function TimelineGrid({
                 {/* Grouped Bookings Detail */}
                 {(inspectBooking.booking.reservationIds?.length ?? 1) > 1 && (
                   <div>
-                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
-                      Grouped Contiguous Bookings (
-                      {inspectBooking.booking.reservationIds?.length})
-                    </span>
-                    <div className="max-h-36 overflow-y-auto rounded-lg border border-slate-200 bg-slate-50/50 divide-y divide-slate-100 p-2 space-y-1">
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                        Grouped Contiguous Bookings (
+                        {inspectBooking.booking.reservationIds?.length})
+                      </span>
+                      <span className="text-[10px] text-amber-600 font-semibold">
+                        Edit individually below
+                      </span>
+                    </div>
+                    <div className="max-h-48 overflow-y-auto rounded-lg border border-slate-200 bg-slate-50/50 divide-y divide-slate-100 p-2 space-y-1.5">
                       {inspectBooking.booking.bookings &&
                       inspectBooking.booking.bookings.length > 0
                         ? inspectBooking.booking.bookings.map((b, i) => (
-                            <div key={b.id} className="pt-1 first:pt-0">
-                              <span className="font-semibold text-slate-800">
-                                Segment {i + 1}:
-                              </span>{" "}
-                              <span className="text-slate-600">
-                                {b.title || "Reserved Segment"}
-                              </span>
+                            <div key={b.id} className="pt-1.5 first:pt-0 flex items-center justify-between gap-2">
+                              <div className="min-w-0">
+                                <span className="font-semibold text-slate-800">
+                                  Segment {i + 1}:
+                                </span>{" "}
+                                <span className="text-slate-600 truncate">
+                                  {b.title || "Reserved Segment"}
+                                </span>
+                                {b.startTime && b.endTime && (
+                                  <div className="text-[10px] text-slate-400 font-medium">
+                                    {formatColomboInterval(b.startTime, b.endTime)}
+                                  </div>
+                                )}
+                              </div>
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                onClick={() =>
+                                  openAccessibleEditModalForSegment(
+                                    b,
+                                    inspectBooking.resource
+                                  )
+                                }
+                                className="h-6 px-2 text-[10px] font-semibold text-blue-700 border-blue-200 hover:bg-blue-100 shrink-0"
+                              >
+                                <Edit3 className="h-2.5 w-2.5 mr-1" />
+                                Edit Times
+                              </Button>
                             </div>
                           ))
                         : inspectBooking.booking.reservationIds?.map((id, i) => (
@@ -1096,6 +1569,195 @@ export function TimelineGrid({
                 className="h-8 px-4 rounded-lg text-xs font-semibold text-slate-700"
               >
                 Close
+              </Button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* MODAL: CONFIRM TIME RESIZE */}
+      {confirmModalState && (
+        <Modal
+          isOpen={confirmModalState.isOpen}
+          onClose={() => setConfirmModalState(null)}
+          title="Confirm Time Adjustment"
+          description={`Update reservation schedule on ${confirmModalState.resourceName}`}
+          className="max-w-md"
+        >
+          <div className="space-y-4 pt-1">
+            {confirmModalState.error && (
+              <div className="p-3 text-xs font-medium text-rose-700 bg-rose-50 border border-rose-200 rounded-xl flex items-start gap-2">
+                <AlertTriangle className="h-4 w-4 text-rose-600 shrink-0 mt-0.5" />
+                <span>{confirmModalState.error}</span>
+              </div>
+            )}
+
+            <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-slate-700">Resource</span>
+                <span className="text-xs font-medium text-slate-900">{confirmModalState.resourceName}</span>
+              </div>
+              {confirmModalState.title && (
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-slate-700">Purpose</span>
+                  <span className="text-xs font-medium text-slate-900">{confirmModalState.title}</span>
+                </div>
+              )}
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 space-y-1">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                  Original Time
+                </span>
+                <span className="text-xs font-bold text-slate-700 block">
+                  {formatColomboInterval(confirmModalState.originalStart, confirmModalState.originalEnd)}
+                </span>
+              </div>
+              <div className="p-3 rounded-xl bg-blue-50 border border-blue-200 space-y-1">
+                <span className="text-[10px] font-bold text-blue-600 uppercase tracking-wider block">
+                  Proposed Time
+                </span>
+                <span className="text-xs font-bold text-blue-900 block">
+                  {formatColomboInterval(confirmModalState.proposedStart, confirmModalState.proposedEnd)}
+                </span>
+              </div>
+            </div>
+
+            <p className="text-[11px] text-slate-500">
+              This adjustment will be verified against office shift hours and existing reservations.
+            </p>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={confirmModalState.isSubmitting}
+                onClick={() => setConfirmModalState(null)}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                disabled={confirmModalState.isSubmitting}
+                onClick={handleConfirmTimeChange}
+                className="bg-blue-600 hover:bg-blue-700 text-white gap-1.5"
+              >
+                {confirmModalState.isSubmitting && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                <span>Confirm & Save</span>
+              </Button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* MODAL: ACCESSIBLE EDIT TIMES */}
+      {accessibleEditModalState && (
+        <Modal
+          isOpen={accessibleEditModalState.isOpen}
+          onClose={() => setAccessibleEditModalState(null)}
+          title="Edit Reservation Times"
+          description={`Update schedule for ${accessibleEditModalState.resourceName}`}
+          className="max-w-md"
+        >
+          <div className="space-y-4 pt-1">
+            {accessibleEditModalState.error && (
+              <div className="p-3 text-xs font-medium text-rose-700 bg-rose-50 border border-rose-200 rounded-xl flex items-start gap-2">
+                <AlertTriangle className="h-4 w-4 text-rose-600 shrink-0 mt-0.5" />
+                <span>{accessibleEditModalState.error}</span>
+              </div>
+            )}
+
+            <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 space-y-1">
+              <span className="text-xs font-bold text-slate-800">
+                {accessibleEditModalState.title || "Reservation"}
+              </span>
+              <p className="text-[11px] text-slate-500">
+                {accessibleEditModalState.resourceName} · {formatColomboDate(selectedDate)}
+              </p>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-xs font-bold text-slate-700 block mb-1">
+                  Start Time <span className="text-rose-500">*</span>
+                </label>
+                <select
+                  value={accessibleEditModalState.startTimeStr}
+                  onChange={(e) =>
+                    setAccessibleEditModalState((prev) =>
+                      prev ? { ...prev, startTimeStr: e.target.value, error: null } : null
+                    )
+                  }
+                  className="h-9 w-full rounded-xl border border-slate-200 px-3 text-xs text-slate-900 bg-white focus:outline-none focus:ring-2 focus:ring-blue-600"
+                >
+                  {timeSlots.map((slot) => (
+                    <option key={slot.slotTime} value={slot.slotTime}>
+                      {slot.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-slate-700 block mb-1">
+                  End Time <span className="text-rose-500">*</span>
+                </label>
+                <select
+                  value={accessibleEditModalState.endTimeStr}
+                  onChange={(e) =>
+                    setAccessibleEditModalState((prev) =>
+                      prev ? { ...prev, endTimeStr: e.target.value, error: null } : null
+                    )
+                  }
+                  className="h-9 w-full rounded-xl border border-slate-200 px-3 text-xs text-slate-900 bg-white focus:outline-none focus:ring-2 focus:ring-blue-600"
+                >
+                  {(() => {
+                    const endOptions = [...timeSlots.map((s) => s.slotTime)];
+                    const lastMin = startMinute + durationMinutes;
+                    const finalTime = `${String(Math.floor(lastMin / 60) % 24).padStart(2, "0")}:${String(lastMin % 60).padStart(2, "0")}`;
+                    if (!endOptions.includes(finalTime)) {
+                      endOptions.push(finalTime);
+                    }
+                    return endOptions.map((timeStr) => {
+                      const iso = createColomboISO(selectedDate, timeStr);
+                      const label = formatColomboTime(iso);
+                      return (
+                        <option key={timeStr} value={timeStr}>
+                          {label}
+                        </option>
+                      );
+                    });
+                  })()}
+                </select>
+              </div>
+            </div>
+
+            <p className="text-[11px] text-slate-400">
+              Shift hours: {shiftHoursLabel}. Only slots fitting the active shift can be saved.
+            </p>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={accessibleEditModalState.isSubmitting}
+                onClick={() => setAccessibleEditModalState(null)}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                disabled={accessibleEditModalState.isSubmitting}
+                onClick={handleSaveAccessibleEdit}
+                className="bg-blue-600 hover:bg-blue-700 text-white gap-1.5"
+              >
+                {accessibleEditModalState.isSubmitting && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                <span>Save Time</span>
               </Button>
             </div>
           </div>

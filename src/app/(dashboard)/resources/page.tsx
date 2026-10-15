@@ -33,7 +33,7 @@ export default async function ResourcesPage({
       {/* Reference Page Header */}
       <header className="px-8 pt-7 pb-4">
         <h1 className="text-2xl font-bold tracking-tight text-slate-900">
-          Meeting rooms
+          Resource Management
         </h1>
       </header>
 

@@ -157,11 +157,15 @@ export function AdminCategories() {
     setFieldErrors({});
     setFormError(null);
 
+    const name = formData.name.trim();
+    const description = formData.description.trim() ? formData.description.trim() : null;
+    const isActive = Boolean(formData.isActive);
+
     startTransition(async () => {
       const res = await createCategoryAction({
-        name: formData.name.trim(),
-        description: formData.description.trim() || undefined,
-        isActive: formData.isActive,
+        name,
+        description,
+        isActive,
       });
 
       if (res.success) {
@@ -170,9 +174,17 @@ export function AdminCategories() {
         fetchCategories();
         router.refresh();
       } else {
-        if (res.fieldErrors) setFieldErrors(res.fieldErrors);
-        setFormError(res.error || "Failed to create category.");
-        toast.error(res.error || "Failed to create category.");
+        if (res.code === "DUPLICATE_NAME") {
+          setFieldErrors({ name: [res.error || "A category with this name already exists."] });
+        } else if (res.fieldErrors && Object.keys(res.fieldErrors).length > 0) {
+          setFieldErrors(res.fieldErrors);
+          if (res.fieldErrors._form && res.fieldErrors._form.length > 0) {
+            setFormError(res.fieldErrors._form[0]);
+          }
+        } else {
+          setFormError(res.error || "Failed to create category.");
+          toast.error(res.error || "Failed to create category.");
+        }
       }
     });
   };
@@ -184,18 +196,22 @@ export function AdminCategories() {
     setFieldErrors({});
     setFormError(null);
 
+    const name = formData.name.trim();
+    const description = formData.description.trim() ? formData.description.trim() : null;
+    const isActive = Boolean(formData.isActive);
+
     startTransition(async () => {
       const res = await updateCategoryAction(editingCategory.id, {
-        name: formData.name.trim(),
-        description: formData.description.trim() || undefined,
+        name,
+        description,
       });
 
       if (res.success) {
         // Also update status if changed
-        if (editingCategory.isActive !== formData.isActive) {
+        if (editingCategory.isActive !== isActive) {
           const statusRes = await setCategoryStatusAction({
             id: editingCategory.id,
-            isActive: formData.isActive,
+            isActive,
           });
           if (!statusRes.success) {
             toast.error(statusRes.error || "Failed to update category status.");
@@ -206,9 +222,17 @@ export function AdminCategories() {
         fetchCategories();
         router.refresh();
       } else {
-        if (res.fieldErrors) setFieldErrors(res.fieldErrors);
-        setFormError(res.error || "Failed to update category.");
-        toast.error(res.error || "Failed to update category.");
+        if (res.code === "DUPLICATE_NAME") {
+          setFieldErrors({ name: [res.error || "A category with this name already exists."] });
+        } else if (res.fieldErrors && Object.keys(res.fieldErrors).length > 0) {
+          setFieldErrors(res.fieldErrors);
+          if (res.fieldErrors._form && res.fieldErrors._form.length > 0) {
+            setFormError(res.fieldErrors._form[0]);
+          }
+        } else {
+          setFormError(res.error || "Failed to update category.");
+          toast.error(res.error || "Failed to update category.");
+        }
       }
     });
   };
@@ -517,12 +541,21 @@ export function AdminCategories() {
               required
               maxLength={100}
               value={formData.name}
-              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+              onChange={(e) => {
+                setFormData({ ...formData, name: e.target.value });
+                if (fieldErrors.name) setFieldErrors({ ...fieldErrors, name: [] });
+              }}
               placeholder="e.g. Acoustic Recording Studios"
-              className="h-9 w-full rounded-xl border border-slate-200 px-3 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600"
+              className={cn(
+                "h-9 w-full rounded-xl border px-3 text-xs text-slate-900 focus:outline-none focus:ring-2",
+                fieldErrors.name?.length
+                  ? "border-rose-400 bg-rose-50/20 focus:ring-rose-500"
+                  : "border-slate-200 focus:ring-blue-600"
+              )}
             />
-            {fieldErrors.name && (
-              <span className="text-[10px] text-rose-500 font-medium block mt-1">
+            {fieldErrors.name && fieldErrors.name[0] && (
+              <span className="text-[11px] text-rose-500 font-medium flex items-center gap-1 mt-1">
+                <AlertTriangle className="h-3 w-3 inline shrink-0" />
                 {fieldErrors.name[0]}
               </span>
             )}
@@ -536,12 +569,21 @@ export function AdminCategories() {
               rows={3}
               maxLength={500}
               value={formData.description}
-              onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+              onChange={(e) => {
+                setFormData({ ...formData, description: e.target.value });
+                if (fieldErrors.description) setFieldErrors({ ...fieldErrors, description: [] });
+              }}
               placeholder="Brief description of the equipment or facility types in this category..."
-              className="w-full rounded-xl border border-slate-200 p-3 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600 resize-none"
+              className={cn(
+                "w-full rounded-xl border p-3 text-xs text-slate-900 focus:outline-none focus:ring-2 resize-none",
+                fieldErrors.description?.length
+                  ? "border-rose-400 bg-rose-50/20 focus:ring-rose-500"
+                  : "border-slate-200 focus:ring-blue-600"
+              )}
             />
-            {fieldErrors.description && (
-              <span className="text-[10px] text-rose-500 font-medium block mt-1">
+            {fieldErrors.description && fieldErrors.description[0] && (
+              <span className="text-[11px] text-rose-500 font-medium flex items-center gap-1 mt-1">
+                <AlertTriangle className="h-3 w-3 inline shrink-0" />
                 {fieldErrors.description[0]}
               </span>
             )}
@@ -606,11 +648,20 @@ export function AdminCategories() {
               required
               maxLength={100}
               value={formData.name}
-              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-              className="h-9 w-full rounded-xl border border-slate-200 px-3 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600"
+              onChange={(e) => {
+                setFormData({ ...formData, name: e.target.value });
+                if (fieldErrors.name) setFieldErrors({ ...fieldErrors, name: [] });
+              }}
+              className={cn(
+                "h-9 w-full rounded-xl border px-3 text-xs text-slate-900 focus:outline-none focus:ring-2",
+                fieldErrors.name?.length
+                  ? "border-rose-400 bg-rose-50/20 focus:ring-rose-500"
+                  : "border-slate-200 focus:ring-blue-600"
+              )}
             />
-            {fieldErrors.name && (
-              <span className="text-[10px] text-rose-500 font-medium block mt-1">
+            {fieldErrors.name && fieldErrors.name[0] && (
+              <span className="text-[11px] text-rose-500 font-medium flex items-center gap-1 mt-1">
+                <AlertTriangle className="h-3 w-3 inline shrink-0" />
                 {fieldErrors.name[0]}
               </span>
             )}
@@ -624,11 +675,20 @@ export function AdminCategories() {
               rows={3}
               maxLength={500}
               value={formData.description}
-              onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-              className="w-full rounded-xl border border-slate-200 p-3 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600 resize-none"
+              onChange={(e) => {
+                setFormData({ ...formData, description: e.target.value });
+                if (fieldErrors.description) setFieldErrors({ ...fieldErrors, description: [] });
+              }}
+              className={cn(
+                "w-full rounded-xl border p-3 text-xs text-slate-900 focus:outline-none focus:ring-2 resize-none",
+                fieldErrors.description?.length
+                  ? "border-rose-400 bg-rose-50/20 focus:ring-rose-500"
+                  : "border-slate-200 focus:ring-blue-600"
+              )}
             />
-            {fieldErrors.description && (
-              <span className="text-[10px] text-rose-500 font-medium block mt-1">
+            {fieldErrors.description && fieldErrors.description[0] && (
+              <span className="text-[11px] text-rose-500 font-medium flex items-center gap-1 mt-1">
+                <AlertTriangle className="h-3 w-3 inline shrink-0" />
                 {fieldErrors.description[0]}
               </span>
             )}

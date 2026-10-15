@@ -229,6 +229,7 @@ export function ResourcesPageClient({
                   .getElementById("availability-section")
                   ?.scrollIntoView({ behavior: "smooth" });
               }}
+              onRefresh={() => fetchOccupancy(selectedDate)}
             />
           </div>
         )}
@@ -237,7 +238,7 @@ export function ResourcesPageClient({
         <div id="availability-section" className="space-y-3 pt-3">
           <div className="flex items-center justify-between">
             <h2 className="text-sm font-bold text-slate-800">
-              Meeting room availability
+              Resource availability
             </h2>
             <span className="text-xs font-semibold text-slate-400">
               {resources.length} resources found

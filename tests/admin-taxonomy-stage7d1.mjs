@@ -26,7 +26,7 @@ async function login(email, address) {
 }
 async function action(name, args = [], jar = {}) {
   const response = await fetch(`${base}/api/reservation-test`, {
-    method: "POST", headers: { Origin: base, Cookie: cookieHeader(jar), "Content-Type": "application/json" },
+    method: "POST", headers: { Origin: base, Cookie: cookieHeader(jar), "Content-Type": "application/json", "x-forwarded-for": `198.51.100.${Math.floor(Math.random() * 200) + 10}` },
     body: JSON.stringify({ name, args }),
   });
   assert.equal(response.status, 200, `${name}: HTTP ${response.status}`);
