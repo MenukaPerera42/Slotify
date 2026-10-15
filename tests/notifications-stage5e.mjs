@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { randomBytes } from "node:crypto";
 import { PrismaClient } from "@prisma/client";
 import { hash } from "argon2";
+import { officeWindow } from "../src/features/office-shifts/utils/office-window.ts";
 
 const prisma = new PrismaClient();
 const base = process.env.SLOTIFY_TEST_URL ?? "http://localhost:3000";
@@ -11,6 +12,7 @@ const userIds = [];
 let categoryId, resourceId;
 let initialNotificationCount;
 let initialReservationCount;
+let testShift;
 
 const pass = (name) => console.log(`PASS ${name}`);
 
@@ -89,8 +91,10 @@ function fails(text, code) {
 }
 
 function slot(hoursFromNow, minutes = 60) {
-  const start = new Date(Date.now() + hoursFromNow * 3600_000);
-  start.setUTCSeconds(0, 0);
+  const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Colombo", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
+  const date = new Date(Date.parse(`${today}T00:00:00Z`) + Math.ceil(hoursFromNow / 4) * 86_400_000).toISOString().slice(0, 10);
+  const window = officeWindow(date, testShift ?? { mode: "FULL_DAY", startMinute: 0, durationMinutes: 1440 });
+  const start = new Date(window.startTime.getTime() + 60 * 60_000);
   return {
     startTime: start.toISOString(),
     endTime: new Date(start.valueOf() + minutes * 60_000).toISOString(),
@@ -98,6 +102,7 @@ function slot(hoursFromNow, minutes = 60) {
 }
 
 try {
+  testShift = await prisma.officeShift.findFirst({ where: { isActive: true } });
   initialNotificationCount = await prisma.notification.count();
   initialReservationCount = await prisma.reservation.count();
   const departmentId = (await prisma.department.findUniqueOrThrow({ where: { code: "ENG" } })).id;

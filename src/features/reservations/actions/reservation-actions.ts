@@ -115,6 +115,17 @@ export async function getReservationAction(id: unknown) {
 export async function cancelReservationAction(id: unknown) {
   return run(async () => { const item = await cancelReservation(idSchema.parse(id)); refresh(); return item; });
 }
+export async function adminRemoveBookingAction(id: unknown) {
+  return run(async () => {
+    const actor = await currentUser();
+    if (!actor) throw new ReservationError("UNAUTHENTICATED", "Sign in with an active account to continue.");
+    if (actor.role !== "ADMIN") throw new ReservationError("FORBIDDEN", "Administrator access is required.");
+    const parsedId = idSchema.parse(id);
+    const item = await cancelReservation(parsedId);
+    refresh();
+    return item;
+  });
+}
 export async function approveReservationAction(id: unknown) {
   return run(async () => { const item = await approveReservation(idSchema.parse(id)); refresh(); return item; });
 }

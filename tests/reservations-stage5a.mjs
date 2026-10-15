@@ -3,6 +3,7 @@ import { randomBytes, randomUUID } from "node:crypto";
 import { PrismaClient } from "@prisma/client";
 import { hash } from "argon2";
 import { businessDayBounds } from "../src/features/reservations/utils/business-date.ts";
+import { officeWindow } from "../src/features/office-shifts/utils/office-window.ts";
 
 
 const prisma = new PrismaClient();
@@ -13,6 +14,7 @@ const userIds = [];
 let categoryId, resourceId, inactiveId;
 let adminManagedId;
 let initialReservationCount;
+let testShift;
 const pass = (name) => console.log(`PASS ${name}`);
 
 function cookies(response) {
@@ -45,14 +47,17 @@ async function action(name, args, jar = {}) {
 function succeeds(text) { assert.match(text, /"success":true/); }
 function fails(text, code) { assert.match(text, new RegExp(`"code":"${code}"`)); }
 function slot(hoursFromNow, minutes = 60) {
-  const start = new Date(Date.now() + hoursFromNow * 3600_000);
-  start.setUTCSeconds(0, 0);
+  const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Colombo", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
+  const date = new Date(Date.parse(`${today}T00:00:00Z`) + Math.ceil(hoursFromNow / 4) * 86_400_000).toISOString().slice(0, 10);
+  const window = officeWindow(date, testShift ?? { mode: "FULL_DAY", startMinute: 0, durationMinutes: 1440 });
+  const start = new Date(window.startTime.getTime() + 60 * 60_000);
   return { startTime: start.toISOString(), endTime: new Date(start.valueOf() + minutes * 60_000).toISOString() };
 }
 const input = (range, resource = resourceId, title = `Test ${tag}`) => ({ resourceId: resource, title, ...range });
 const find = (title) => prisma.reservation.findFirstOrThrow({ where: { title, resourceId } });
 
 try {
+  testShift = await prisma.officeShift.findFirst({ where: { isActive: true } });
   initialReservationCount = await prisma.reservation.count();
   const departmentId = (await prisma.department.findUniqueOrThrow({ where: { code: "ENG" } })).id;
   categoryId = (await prisma.resourceCategory.create({ data: { name: `Stage5A-${tag}` } })).id;

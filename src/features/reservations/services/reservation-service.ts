@@ -9,6 +9,7 @@ import { activeUserListSchema, reservationListSchema, type AvailabilityInput, ty
 import { createNotificationsTx } from "@/features/notifications/services/notification-service";
 import { groupAdjacentReservations } from "../utils/group-adjacent";
 import { activeShift, lockSchedulingPolicy } from "@/features/office-shifts/services/office-shift-service";
+import { formatColomboDate, formatColomboInterval } from "../utils/client-date";
 import { bookingOperationalDate } from "@/features/office-shifts/utils/office-window";
 
 const blocking: ReservationStatus[] = ["PENDING", "APPROVED"];
@@ -255,6 +256,9 @@ async function transition(id: string, status: "APPROVED" | "REJECTED" | "CANCELL
     } else if (status === "CANCELLED") {
       if (updated.userId && updated.userId !== user.id) {
         // Admin cancelled someone else's reservation
+        const dateStr = formatColomboDate(updated.startTime);
+        const intervalStr = formatColomboInterval(updated.startTime, updated.endTime);
+        const resourceName = updated.resource?.name || "the resource";
         await createNotificationsTx(tx, [
           {
             recipientUserId: updated.userId,
@@ -262,7 +266,7 @@ async function transition(id: string, status: "APPROVED" | "REJECTED" | "CANCELL
             reservationId: updated.id,
             type: "RESERVATION_CANCELLED",
             title: "Reservation Cancelled",
-            message: `Your reservation for "${updated.title}" was cancelled by an administrator.`,
+            message: `Your reservation for "${updated.title}" on ${resourceName} (${dateStr} · ${intervalStr}) was cancelled by an administrator.`,
           },
         ]);
       } else if (updated.userId === user.id) {

@@ -62,19 +62,19 @@ export function AvailabilityCard({
 
   return (
     <>
-      <div className="bg-white rounded-2xl border border-[#E5E7EB] p-5 shadow-2xs hover:border-slate-300 transition-all space-y-4">
+      <div className="bg-white rounded-2xl border border-[#E5E7EB] p-4 sm:p-5 shadow-2xs hover:border-slate-300 transition-all space-y-4 min-w-0">
         {/* Top Row: Name, Location, Attribute Pills, and Actions */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           {/* Left: Resource Name & Location */}
-          <div className="flex items-center gap-3 min-w-52">
+          <div className="flex items-center gap-3 min-w-0">
             <div className="h-10 w-10 rounded-xl bg-blue-50 border border-blue-100 flex items-center justify-center text-blue-600 shadow-2xs shrink-0">
               {renderIcon()}
             </div>
-            <div>
-              <h3 className="text-sm font-bold text-slate-900 leading-tight">
+            <div className="min-w-0">
+              <h3 className="text-sm font-bold text-slate-900 leading-tight break-words">
                 {resource.name}
               </h3>
-              <p className="text-xs text-slate-400 mt-0.5">
+              <p className="text-xs text-slate-400 mt-0.5 break-words">
                 {resource.location}
               </p>
             </div>
@@ -96,7 +96,7 @@ export function AvailabilityCard({
           </div>
 
           {/* Right: Actions and Primary Booking Button */}
-          <div className="flex items-center gap-2 self-end md:self-auto">
+          <div className="flex flex-wrap items-center gap-2 self-stretch md:self-auto min-w-0">
             <Link href={`/resources/${resource.id}`}>
               <Button
                 variant="ghost"
@@ -139,7 +139,7 @@ export function AvailabilityCard({
                 size="sm"
                 disabled={!resource.isActive}
                 onClick={() => onBook(resource.id)}
-                className="h-9 px-5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-medium text-xs flex items-center gap-2 shadow-xs transition-colors shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="h-9 px-3 sm:px-5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-medium text-xs flex items-center gap-2 shadow-xs transition-colors max-w-full disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <span>{bookingCtaText}</span>
                 <ArrowRight className="h-4 w-4" />
@@ -149,7 +149,7 @@ export function AvailabilityCard({
                 <Button
                   size="sm"
                   disabled={!resource.isActive}
-                  className="h-9 px-5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-medium text-xs flex items-center gap-2 shadow-xs transition-colors shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="h-9 px-3 sm:px-5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-medium text-xs flex items-center gap-2 shadow-xs transition-colors max-w-full disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <span>{bookingCtaText}</span>
                   <ArrowRight className="h-4 w-4" />
@@ -160,7 +160,7 @@ export function AvailabilityCard({
         </div>
 
         {/* Bottom Row: Truthful Operational Status & Schedule Indicator matching reference layout */}
-        <div className="flex items-center justify-between pt-3 border-t border-slate-100">
+        <div className="flex flex-wrap items-center justify-between gap-2 pt-3 border-t border-slate-100">
           <div className="flex items-center gap-2">
             <span
               className={`h-2.5 w-2.5 rounded-full ${

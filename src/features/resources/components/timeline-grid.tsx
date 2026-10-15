@@ -18,6 +18,7 @@ import {
   Edit3,
   Loader2,
   Eye,
+  Trash2,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useToast } from "@/components/ui/toast";
@@ -25,6 +26,7 @@ import {
   correctReservationDepartmentAction,
   getReservationAction,
   updateReservationTimeAction,
+  adminRemoveBookingAction,
 } from "@/features/reservations/actions/reservation-actions";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -193,6 +195,21 @@ export function TimelineGrid({
     isSubmitting: boolean;
     error: string | null;
     isStale: boolean;
+  } | null>(null);
+
+  // Admin Remove Booking confirmation modal state
+  const [removeModalState, setRemoveModalState] = useState<{
+    isOpen: boolean;
+    reservationId: string;
+    resourceName: string;
+    title: string;
+    departmentName: string;
+    dateStr: string;
+    startTime: Date | string;
+    endTime: Date | string;
+    status: string;
+    isSubmitting: boolean;
+    error: string | null;
   } | null>(null);
 
   // Department correction form state inside inspection modal
@@ -464,7 +481,7 @@ export function TimelineGrid({
 
   // Commit proposed drag time change to database
   const handleConfirmTimeChange = async () => {
-    if (!confirmModalState || confirmModalState.isStale) return;
+    if (!confirmModalState || confirmModalState.isStale || confirmModalState.isSubmitting) return;
 
     setConfirmModalState((prev) => (prev ? { ...prev, isSubmitting: true, error: null } : null));
 
@@ -494,6 +511,10 @@ export function TimelineGrid({
           errorMsg = "This booking changed. Reload its latest time before resizing again.";
         } else if (res.code === "INVALID_TIME_RANGE") {
           errorMsg = "End time must be after start time.";
+        } else if (res.code === "FORBIDDEN" || res.code === "UNAUTHENTICATED") {
+          errorMsg = "Administrator access is required to adjust this booking.";
+        } else if (res.code === "DATABASE_ERROR") {
+          errorMsg = "The booking could not be saved. Please try again.";
         }
         setConfirmModalState((prev) => (prev ? { ...prev, isSubmitting: false, error: errorMsg, isStale: res.code === "STALE_UPDATE" } : null));
       }
@@ -623,6 +644,98 @@ export function TimelineGrid({
     }
   };
 
+  // Open Admin Remove Booking confirmation modal for single booking
+  const openRemoveBookingModal = (
+    booking: ReservationOccupancy,
+    resource: TimelineResourceItem
+  ) => {
+    const reservationId = booking.reservationIds?.[0] || booking.id || "";
+    const dept = departments.find((d) => d.id === booking.departmentId);
+    const departmentName = dept ? `${dept.name} (${dept.code})` : "Unassigned / Legacy";
+
+    setRemoveModalState({
+      isOpen: true,
+      reservationId,
+      resourceName: resource.name,
+      title: booking.title || "Reservation",
+      departmentName,
+      dateStr: selectedDate,
+      startTime: booking.startTime,
+      endTime: booking.endTime,
+      status: booking.status,
+      isSubmitting: false,
+      error: null,
+    });
+  };
+
+  // Open Admin Remove Booking confirmation modal for a specific segment in a grouped booking
+  const openRemoveBookingModalForSegment = (
+    segment: { id: string; title: string; startTime?: Date | string; endTime?: Date | string },
+    resource: TimelineResourceItem,
+    departmentId?: string | null
+  ) => {
+    const dept = departments.find((d) => d.id === departmentId);
+    const departmentName = dept ? `${dept.name} (${dept.code})` : "Unassigned / Legacy";
+
+    setRemoveModalState({
+      isOpen: true,
+      reservationId: segment.id,
+      resourceName: resource.name,
+      title: segment.title || "Reserved Segment",
+      departmentName,
+      dateStr: selectedDate,
+      startTime: segment.startTime || selectedDate,
+      endTime: segment.endTime || selectedDate,
+      status: "APPROVED",
+      isSubmitting: false,
+      error: null,
+    });
+  };
+
+  // Confirm booking removal via admin action
+  const handleConfirmRemoveBooking = async () => {
+    if (!removeModalState) return;
+
+    setRemoveModalState((prev) => (prev ? { ...prev, isSubmitting: true, error: null } : null));
+
+    try {
+      const res = await adminRemoveBookingAction(removeModalState.reservationId);
+      if (res.success) {
+        toast.success(`Booking "${removeModalState.title}" removed successfully.`);
+        const removedId = removeModalState.reservationId;
+        setRemoveModalState(null);
+
+        // Update or close inspectBooking if open
+        setInspectBooking((prev) => {
+          if (!prev) return null;
+          const remainingIds = prev.booking.reservationIds?.filter((id) => id !== removedId);
+          const remainingBookings = prev.booking.bookings?.filter((b) => b.id !== removedId);
+          if (!remainingIds || remainingIds.length === 0) {
+            return null;
+          }
+          return {
+            ...prev,
+            booking: {
+              ...prev.booking,
+              reservationIds: remainingIds,
+              bookings: remainingBookings,
+            },
+          };
+        });
+
+        onRefresh?.();
+        router.refresh();
+      } else {
+        const errorMsg = res.error || "Failed to remove booking.";
+        setRemoveModalState((prev) => (prev ? { ...prev, isSubmitting: false, error: errorMsg } : null));
+        toast.error(errorMsg);
+      }
+    } catch {
+      setRemoveModalState((prev) => (prev ? { ...prev, isSubmitting: false, error: "Network error while removing booking." } : null));
+      toast.error("Failed to remove booking.");
+    }
+  };
+
   /**
    * Tests if a single 30-minute slot is blocked by any reservation on this resource.
    */
@@ -665,7 +778,7 @@ export function TimelineGrid({
   };
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-3 min-w-0 max-w-full">
       {/* Outside-Window Commitments Banner (Zero Silent Hiding) */}
       {outsideWindowList.length > 0 && (
         <div className="rounded-2xl border border-amber-200 bg-amber-50/90 p-3 sm:p-4 text-xs shadow-2xs space-y-2">
@@ -752,7 +865,7 @@ export function TimelineGrid({
       )}
 
       {/* Main Schedule Container */}
-      <div className="bg-white rounded-2xl border border-[#E5E7EB] shadow-2xs overflow-hidden">
+      <div className="bg-white rounded-2xl border border-[#E5E7EB] shadow-2xs overflow-hidden min-w-0 max-w-full">
         {/* Full Date & Dynamic Shift Header Banner */}
         <div className="px-4 py-2.5 bg-slate-50/70 border-b border-[#E5E7EB] flex flex-wrap items-center justify-between gap-2 text-xs">
           <div className="flex items-center gap-2 flex-wrap">
@@ -853,7 +966,7 @@ export function TimelineGrid({
           </div>
         ) : (
           /* Only resources with blocking bookings in this window are shown. */
-          <div className="overflow-x-auto relative" ref={scrollContainerRef}>
+          <div className="overflow-x-auto relative max-w-full overscroll-x-contain" ref={scrollContainerRef}>
             <div style={{ minWidth: `${gridMinWidth}px` }}>
               {/* Header Row: Sticky Resources column + Dynamic Time markers */}
               <div className="flex items-center border-b border-[#E5E7EB] bg-slate-50/70 text-[11px] font-semibold text-slate-500">
@@ -1239,7 +1352,7 @@ export function TimelineGrid({
             selectedDate,
             { weekday: "long", month: "long", day: "numeric" }
           )}`}
-          className="max-w-md"
+          className="max-w-md overflow-x-hidden break-words"
         >
           <div className="space-y-4 text-xs">
             {/* Status & Department Bar */}
@@ -1289,11 +1402,11 @@ export function TimelineGrid({
             </div>
 
             {/* Time Interval */}
-            <div className="flex items-center justify-between p-3 rounded-xl bg-blue-50/60 border border-blue-100 text-blue-900">
-              <div className="flex items-center gap-2 min-w-0">
+            <div className="p-3 rounded-xl bg-blue-50/60 border border-blue-100 text-blue-900 space-y-3">
+              <div className="flex items-start gap-2 min-w-0">
                 <Clock className="h-4 w-4 text-blue-600 shrink-0" />
                 <div className="min-w-0">
-                  <span className="font-bold block truncate">
+                  <span className="font-bold block leading-relaxed break-words">
                     {formatColomboInterval(
                       inspectBooking.booking.startTime,
                       inspectBooking.booking.endTime
@@ -1305,21 +1418,41 @@ export function TimelineGrid({
                 </div>
               </div>
               {isAdmin && (inspectBooking.booking.reservationIds?.length ?? 1) <= 1 && (
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  onClick={() =>
-                    openAccessibleEditModal(
-                      inspectBooking.booking,
-                      inspectBooking.resource
-                    )
-                  }
-                  className="h-7 px-2.5 text-xs font-semibold border-blue-200 text-blue-700 hover:bg-blue-100/60 shrink-0"
-                >
-                  <Edit3 className="h-3 w-3 mr-1" />
-                  Edit Times
-                </Button>
+                <div className="flex flex-col gap-2 w-full">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() =>
+                      openAccessibleEditModal(
+                        inspectBooking.booking,
+                        inspectBooking.resource
+                      )
+                    }
+                    className="h-9 w-full justify-center px-3 text-xs font-semibold border-blue-200 text-blue-700 hover:bg-blue-100/60"
+                  >
+                    <Edit3 className="h-3 w-3 mr-1" />
+                    Edit Times
+                  </Button>
+                  {(inspectBooking.booking.status === "PENDING" ||
+                    inspectBooking.booking.status === "APPROVED") && (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() =>
+                        openRemoveBookingModal(
+                          inspectBooking.booking,
+                          inspectBooking.resource
+                        )
+                      }
+                      className="h-9 w-full justify-center px-3 text-xs font-semibold border-rose-200 text-rose-700 hover:bg-rose-50 hover:border-rose-300"
+                    >
+                      <Trash2 className="h-3 w-3 mr-1" />
+                      Remove Booking
+                    </Button>
+                  )}
+                </div>
               )}
             </div>
 
@@ -1382,26 +1515,67 @@ export function TimelineGrid({
                                   </div>
                                 )}
                               </div>
+                              <div className="flex items-center gap-1 shrink-0">
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() =>
+                                    openAccessibleEditModalForSegment(
+                                      b,
+                                      inspectBooking.resource
+                                    )
+                                  }
+                                  className="h-6 px-2 text-[10px] font-semibold text-blue-700 border-blue-200 hover:bg-blue-100 shrink-0"
+                                >
+                                  <Edit3 className="h-2.5 w-2.5 mr-1" />
+                                  Edit Times
+                                </Button>
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() =>
+                                    openRemoveBookingModalForSegment(
+                                      b,
+                                      inspectBooking.resource,
+                                      inspectBooking.booking.departmentId
+                                    )
+                                  }
+                                  className="h-6 px-2 text-[10px] font-semibold text-rose-700 border-rose-200 hover:bg-rose-50 hover:border-rose-300 shrink-0"
+                                >
+                                  <Trash2 className="h-2.5 w-2.5 mr-1" />
+                                  Remove Booking
+                                </Button>
+                              </div>
+                            </div>
+                          ))
+                        : inspectBooking.booking.reservationIds?.map((id, i) => (
+                            <div key={id} className="pt-1.5 first:pt-0 flex items-center justify-between gap-2">
+                              <span className="font-mono text-[11px] text-slate-600">
+                                Segment {i + 1}: {id.slice(0, 8)}...
+                              </span>
                               <Button
                                 type="button"
                                 size="sm"
                                 variant="outline"
                                 onClick={() =>
-                                  openAccessibleEditModalForSegment(
-                                    b,
-                                    inspectBooking.resource
+                                  openRemoveBookingModalForSegment(
+                                    {
+                                      id,
+                                      title: `Segment ${i + 1}`,
+                                      startTime: inspectBooking.booking.startTime,
+                                      endTime: inspectBooking.booking.endTime,
+                                    },
+                                    inspectBooking.resource,
+                                    inspectBooking.booking.departmentId
                                   )
                                 }
-                                className="h-6 px-2 text-[10px] font-semibold text-blue-700 border-blue-200 hover:bg-blue-100 shrink-0"
+                                className="h-6 px-2 text-[10px] font-semibold text-rose-700 border-rose-200 hover:bg-rose-50 hover:border-rose-300 shrink-0"
                               >
-                                <Edit3 className="h-2.5 w-2.5 mr-1" />
-                                Edit Times
+                                <Trash2 className="h-2.5 w-2.5 mr-1" />
+                                Remove Booking
                               </Button>
-                            </div>
-                          ))
-                        : inspectBooking.booking.reservationIds?.map((id, i) => (
-                            <div key={id} className="pt-1 first:pt-0 font-mono text-[11px] text-slate-600">
-                              Booking {i + 1}: {id.slice(0, 8)}...
                             </div>
                           ))}
                     </div>
@@ -1698,9 +1872,9 @@ export function TimelineGrid({
           onClose={() => setConfirmModalState(null)}
           title="Confirm Time Adjustment"
           description={`Update reservation schedule on ${confirmModalState.resourceName}`}
-          className="max-w-md"
+          className="max-w-md overflow-x-hidden break-words"
         >
-          <div className="space-y-4 pt-1">
+          <div className="space-y-4 pt-1 min-w-0">
             {confirmModalState.error && (
               <div className="p-3 text-xs font-medium text-rose-700 bg-rose-50 border border-rose-200 rounded-xl flex items-start gap-2">
                 <AlertTriangle className="h-4 w-4 text-rose-600 shrink-0 mt-0.5" />
@@ -1709,9 +1883,9 @@ export function TimelineGrid({
             )}
 
             <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 space-y-2">
-              <div className="flex items-center justify-between">
+              <div className="flex flex-wrap items-start justify-between gap-1">
                 <span className="text-xs font-bold text-slate-700">Resource</span>
-                <span className="text-xs font-medium text-slate-900">{confirmModalState.resourceName}</span>
+                <span className="text-xs font-medium text-slate-900 break-words text-right min-w-0">{confirmModalState.resourceName}</span>
               </div>
               {confirmModalState.title && (
                 <div className="flex items-center justify-between">
@@ -1725,7 +1899,7 @@ export function TimelineGrid({
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 min-[390px]:grid-cols-2 gap-3">
               <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 space-y-1">
                 <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
                   Original Time
@@ -1748,7 +1922,7 @@ export function TimelineGrid({
               This adjustment will be verified against office shift hours and existing reservations.
             </p>
 
-            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+            <div className="flex flex-wrap items-center justify-end gap-2 pt-2 border-t border-slate-100">
               {confirmModalState.isStale && (
                 <Button type="button" variant="outline" size="sm" onClick={() => reloadLatestBooking(confirmModalState.reservationId)}>
                   Reload Latest Booking
@@ -1785,7 +1959,7 @@ export function TimelineGrid({
           onClose={() => setAccessibleEditModalState(null)}
           title="Edit Reservation Times"
           description={`Update schedule for ${accessibleEditModalState.resourceName}`}
-          className="max-w-md"
+          className="max-w-md overflow-x-hidden break-words"
         >
           <div className="space-y-4 pt-1">
             {accessibleEditModalState.error && (
@@ -1888,6 +2062,120 @@ export function TimelineGrid({
               >
                 {accessibleEditModalState.isSubmitting && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
                 <span>Save Time</span>
+              </Button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* MODAL: ADMIN CONFIRM BOOKING REMOVAL */}
+      {removeModalState && (
+        <Modal
+          isOpen={removeModalState.isOpen}
+          onClose={() => !removeModalState.isSubmitting && setRemoveModalState(null)}
+          title="Confirm Booking Removal"
+          description={`Remove reservation on ${removeModalState.resourceName}`}
+          className="max-w-md overflow-x-hidden break-words"
+        >
+          <div className="space-y-4 pt-1">
+            {removeModalState.error && (
+              <div className="p-3 text-xs font-medium text-rose-700 bg-rose-50 border border-rose-200 rounded-xl flex items-start gap-2">
+                <AlertTriangle className="h-4 w-4 text-rose-600 shrink-0 mt-0.5" />
+                <span>{removeModalState.error}</span>
+              </div>
+            )}
+
+            <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 space-y-2.5">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                  Reservation Purpose / Title
+                </span>
+                <span
+                  className={cn(
+                    "text-[10px] font-bold px-2 py-0.5 rounded-full border",
+                    removeModalState.status === "PENDING"
+                      ? "bg-amber-50 text-amber-800 border-amber-300"
+                      : "bg-emerald-50 text-emerald-800 border-emerald-300"
+                  )}
+                >
+                  {removeModalState.status === "PENDING" ? "PENDING" : "APPROVED"}
+                </span>
+              </div>
+              <p className="text-xs font-bold text-slate-900">
+                {removeModalState.title}
+              </p>
+
+              <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-200/60 text-xs">
+                <div>
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                    Resource
+                  </span>
+                  <span className="text-slate-800 font-medium truncate block">
+                    {removeModalState.resourceName}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                    Department
+                  </span>
+                  <span className="text-slate-800 font-medium truncate block">
+                    {removeModalState.departmentName}
+                  </span>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-200/60 text-xs">
+                <div>
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                    Reservation Date
+                  </span>
+                  <span className="text-slate-800 font-medium block">
+                    {formatColomboDate(removeModalState.startTime)}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                    Time Interval
+                  </span>
+                  <span className="text-slate-800 font-medium block">
+                    {formatColomboInterval(
+                      removeModalState.startTime,
+                      removeModalState.endTime
+                    )}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <div className="p-3 rounded-xl bg-amber-50/70 border border-amber-200/80 text-amber-900 text-xs flex items-start gap-2">
+              <AlertCircle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
+              <p className="leading-relaxed">
+                Removing this booking will release the reserved time slot. The reservation will remain in history.
+              </p>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={removeModalState.isSubmitting}
+                onClick={() => setRemoveModalState(null)}
+                className="h-8 text-xs font-medium"
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                disabled={removeModalState.isSubmitting}
+                onClick={handleConfirmRemoveBooking}
+                className="h-8 text-xs font-semibold bg-rose-600 hover:bg-rose-700 text-white gap-1.5 shadow-xs"
+              >
+                {removeModalState.isSubmitting && (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                )}
+                <span>Remove Booking</span>
               </Button>
             </div>
           </div>

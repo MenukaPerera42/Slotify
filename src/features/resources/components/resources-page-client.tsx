@@ -183,7 +183,7 @@ export function ResourcesPageClient({
 
   return (
     <>
-      <div className="space-y-6">
+      <div className="space-y-6 min-w-0 max-w-full">
         {/* Toolbar: View Tabs + Single Dynamic Date Strip Bar + Filters */}
         <ResourceToolbar
           categories={categories}
@@ -204,7 +204,7 @@ export function ResourcesPageClient({
 
         {/* Timeline Grid: Continuous Multi-hour Blocks + Adjacent Grouping */}
         {activeView === "calendar" && resources.length > 0 && (
-          <div className="space-y-3">
+          <div className="space-y-3 min-w-0 max-w-full">
             <TimelineGrid
               resources={resources}
               selectedDate={selectedDate}
@@ -237,7 +237,7 @@ export function ResourcesPageClient({
 
         {/* Bottom Section: Availability Cards matching reference */}
         <div id="availability-section" className="space-y-3 pt-3">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-wrap items-center justify-between gap-2">
             <h2 className="text-sm font-bold text-slate-800">
               Resource availability
             </h2>

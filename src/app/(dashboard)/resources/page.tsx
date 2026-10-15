@@ -29,18 +29,18 @@ export default async function ResourcesPage({
   const departments = await publicActiveDepartments();
 
   return (
-    <div className="flex-1 flex flex-col min-w-0">
+    <div className="flex-1 flex flex-col min-w-0 max-w-full overflow-x-clip">
       {/* Reference Page Header */}
-      <header className="px-8 pt-7 pb-4">
-        <h1 className="text-2xl font-bold tracking-tight text-slate-900">
+      <header className="px-4 sm:px-6 lg:px-8 pt-6 sm:pt-7 pb-4 min-w-0">
+        <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-slate-900">
           Resource Management
         </h1>
-        <p className="text-xs text-slate-500 mt-1">
+        <p className="text-xs text-slate-500 mt-1 leading-relaxed max-w-2xl">
           Discover, manage, and reserve shared workspaces, meeting rooms, and equipment.
         </p>
       </header>
 
-      <main className="flex-1 px-8 pb-12 max-w-7xl w-full">
+      <main className="flex-1 px-4 sm:px-6 lg:px-8 pb-12 max-w-7xl w-full min-w-0">
         <ResourcesPageClient
           user={{
             id: user.id,

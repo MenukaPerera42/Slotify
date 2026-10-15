@@ -76,12 +76,12 @@ export function ResourceToolbar({
     <>
       <div className="space-y-4">
         {/* Top Segment: Tabs (Calendar / Catalog Cards) + Add Button */}
-        <div className="flex items-center justify-between gap-4">
-          <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center justify-between gap-3 min-w-0">
+          <div className="flex items-center gap-2 min-w-0">
             <button
               type="button"
               onClick={() => onViewChange?.("calendar")}
-              className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+              className={`px-3 sm:px-3.5 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all ${
                 activeView === "calendar"
                   ? "bg-blue-100/70 text-blue-700 shadow-2xs"
                   : "bg-white text-slate-500 hover:text-slate-800 border border-slate-200"
@@ -92,7 +92,7 @@ export function ResourceToolbar({
             <button
               type="button"
               onClick={() => onViewChange?.("map")}
-              className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+              className={`px-3 sm:px-3.5 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all ${
                 activeView === "map"
                   ? "bg-blue-100/70 text-blue-700 shadow-2xs"
                   : "bg-white text-slate-500 hover:text-slate-800 border border-slate-200"
@@ -106,7 +106,7 @@ export function ResourceToolbar({
             <Button
               onClick={() => setIsAddOpen(true)}
               size="sm"
-              className="rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-medium text-xs flex items-center gap-1.5 shadow-xs"
+              className="rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-medium text-xs flex items-center gap-1.5 shadow-xs shrink-0"
             >
               <Plus className="h-4 w-4" />
               <span>Add Resource</span>
@@ -123,7 +123,7 @@ export function ResourceToolbar({
         {/* Filter inputs matching reference layout */}
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
           {/* Search Input Box */}
-          <form onSubmit={handleSearchSubmit} className="relative flex items-center">
+          <form onSubmit={handleSearchSubmit} className="relative flex items-center min-w-0">
             <Search className="absolute left-3.5 h-4 w-4 text-slate-400 pointer-events-none" />
             <input
               type="text"
@@ -164,8 +164,8 @@ export function ResourceToolbar({
           </div>
 
           {/* Operational Status Dropdown */}
-          <div className="flex items-center gap-2">
-            <div className="relative flex-1">
+          <div className="flex items-center gap-2 min-w-0">
+            <div className="relative flex-1 min-w-0">
               <select
                 value={selectedStatus}
                 onChange={(e) => updateFilters("status", e.target.value)}
