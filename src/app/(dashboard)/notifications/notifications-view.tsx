@@ -1,8 +1,7 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
 import {
   Check,
   CheckCheck,
@@ -57,7 +56,8 @@ export function NotificationsView({
 
   const [filterMode, setFilterMode] = useState<"ALL" | "UNREAD" | "READ">("ALL");
   const [markingId, setMarkingId] = useState<string | null>(null);
-  // Pure local overrides for instant responsive feedback without cascading effect setState
+  const viewInFlight = useRef<Set<string>>(new Set());
+  // Local read state is applied only after the server confirms persistence.
   const [locallyReadIds, setLocallyReadIds] = useState<string[]>([]);
   const [isAllLocallyRead, setIsAllLocallyRead] = useState(false);
 
@@ -95,8 +95,9 @@ export function NotificationsView({
       try {
         const res = await markNotificationAsReadAction(id);
         if (res.success) {
-          // Optimistic local state update
+          // Apply the confirmed read state immediately.
           setLocallyReadIds((prev) => (prev.includes(id) ? prev : [...prev, id]));
+          window.dispatchEvent(new Event("slotify:notifications-changed"));
           toast.success("Notification marked as read.");
           router.refresh();
         } else {
@@ -119,8 +120,9 @@ export function NotificationsView({
       try {
         const res = await markAllNotificationsAsReadAction();
         if (res.success) {
-          // Optimistic local state update
+          // Apply the confirmed read state immediately.
           setIsAllLocallyRead(true);
+          window.dispatchEvent(new Event("slotify:notifications-changed"));
           toast.success("All notifications marked as read.");
           router.refresh();
         } else {
@@ -132,6 +134,30 @@ export function NotificationsView({
         setIsMarkingAll(false);
       }
     });
+  };
+
+  const handleView = async (item: NotificationItem) => {
+    if (viewInFlight.current.has(item.id)) return;
+    viewInFlight.current.add(item.id);
+    setMarkingId(item.id);
+    try {
+      if (!item.isRead) {
+        const result = await markNotificationAsReadAction(item.id);
+        if (!result.success) {
+          toast.error(result.error || "Unable to mark this notification as read.");
+          return;
+        }
+        setLocallyReadIds((previous) => previous.includes(item.id) ? previous : [...previous, item.id]);
+        window.dispatchEvent(new Event("slotify:notifications-changed"));
+      }
+      router.push("/reservations");
+      router.refresh();
+    } catch {
+      toast.error("Unable to open this notification. Please try again.");
+    } finally {
+      viewInFlight.current.delete(item.id);
+      setMarkingId(null);
+    }
   };
 
   const getTypeIcon = (type: NotificationItem["type"]) => {
@@ -327,14 +353,15 @@ export function NotificationsView({
 
                 {/* Actions */}
                 <div className="flex items-center gap-2 self-end sm:self-center shrink-0 pt-2 sm:pt-0">
-                  {/* VIEW action: Navigates without marking as read */}
-                  <Link
-                    href="/reservations"
-                    className="h-7 px-2.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-600 hover:text-slate-900 text-[11px] font-semibold flex items-center gap-1 transition-colors"
+                  <button
+                    type="button"
+                    onClick={() => handleView(item)}
+                    disabled={isItemMarking || isPending}
+                    className="h-7 px-2.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-600 hover:text-slate-900 text-[11px] font-semibold flex items-center gap-1 transition-colors disabled:opacity-50"
                   >
+                    {isItemMarking ? <Loader2 className="h-3 w-3 animate-spin" /> : <ExternalLink className="h-3 w-3" />}
                     <span>View</span>
-                    <ExternalLink className="h-3 w-3" />
-                  </Link>
+                  </button>
 
                   {/* Explicit MARK AS READ action on unread notifications */}
                   {!item.isRead ? (

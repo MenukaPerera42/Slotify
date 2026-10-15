@@ -2,7 +2,6 @@
 
 import { useMemo } from "react";
 import { ChevronLeft, ChevronRight, Calendar as CalendarIcon } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { getColomboTodayString } from "@/features/reservations/utils/client-date";
 
 export interface CalendarDaySummary {
@@ -76,12 +75,6 @@ export function DashboardFullCalendar({
     }
   };
 
-  const handleTodayClick = () => {
-    const [tY, tM] = todayStr.split("-").map(Number);
-    onChangeMonth(tY, tM);
-    onSelectDate(todayStr);
-  };
-
   return (
     <div className="bg-white rounded-2xl border border-[#E5E7EB] shadow-2xs p-4 sm:p-4.5 space-y-3">
       {/* Calendar Header with Month Selector */}
@@ -100,18 +93,7 @@ export function DashboardFullCalendar({
           </div>
         </div>
 
-        <div className="flex items-center gap-1.5">
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={handleTodayClick}
-            className="h-7 px-2 text-[11px] font-semibold text-slate-700 hover:text-blue-600 rounded-lg border-slate-200 shadow-2xs"
-          >
-            Today
-          </Button>
-
-          <div className="flex items-center gap-1">
+        <div className="flex items-center gap-1">
             <button
               type="button"
               onClick={handlePrevMonth}
@@ -130,7 +112,6 @@ export function DashboardFullCalendar({
             >
               <ChevronRight className="h-3.5 w-3.5" />
             </button>
-          </div>
         </div>
       </div>
 

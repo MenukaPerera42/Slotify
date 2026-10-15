@@ -1793,15 +1793,17 @@ export function TimelineGrid({
                                 );
                                 setInspectBooking((prev) => {
                                   if (!prev) return null;
+                                  if (prev.booking.id !== targetId && !prev.booking.reservationIds?.includes(targetId)) return prev;
                                   return {
                                     ...prev,
                                     booking: {
                                       ...prev.booking,
-                                      departmentId: correctTargetDeptId,
+                                      departmentId: res.data.reservation.departmentId,
                                     },
                                   };
                                 });
                                 setIsCorrectingDept(false);
+                                onRefresh?.();
                                 router.refresh();
                               } else {
                                 if (res.fieldErrors && Object.keys(res.fieldErrors).length > 0) {

@@ -40,15 +40,18 @@ export function AppSidebar({ user }: { user: { name: string; email: string; role
 
   useEffect(() => {
     let isMounted = true;
-    getUnreadNotificationCountAction()
+    const refreshUnreadCount = () => getUnreadNotificationCountAction()
       .then((res) => {
         if (isMounted && res.success && typeof res.data === "number") {
           setUnreadCount(res.data);
         }
       })
       .catch(() => {});
+    void refreshUnreadCount();
+    window.addEventListener("slotify:notifications-changed", refreshUnreadCount);
     return () => {
       isMounted = false;
+      window.removeEventListener("slotify:notifications-changed", refreshUnreadCount);
     };
   }, [pathname]);
 

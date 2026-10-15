@@ -4,6 +4,7 @@ import { PrismaClient } from "@prisma/client";
 import { hash } from "argon2";
 import { groupAdjacentReservations } from "../src/features/reservations/utils/group-adjacent.ts";
 import { seedDepartments } from "../prisma/departments.ts";
+import { officeWindow } from "../src/features/office-shifts/utils/office-window.ts";
 
 const prisma = new PrismaClient();
 const base = process.env.SLOTIFY_TEST_URL ?? "http://localhost:3000";
@@ -12,6 +13,7 @@ const password = `Test-${randomBytes(18).toString("base64url")}`;
 const users = [];
 const departments = [];
 let categoryId, resourceId;
+let testShift;
 const pass = (label) => console.log(`PASS ${label}`);
 const cookies = (response) => Object.fromEntries(response.headers.getSetCookie().map((line) => line.split(";", 1)[0].split(/=(.*)/s).slice(0, 2)));
 const cookieHeader = (jar) => Object.entries(jar).map(([key, value]) => `${key}=${value}`).join("; ");
@@ -40,12 +42,16 @@ async function action(name, args = [], jar = {}) {
 function success(result) { assert.equal(result.success, true, JSON.stringify(result)); return result.data; }
 function failure(result, code) { assert.equal(result.success, false, JSON.stringify(result)); assert.equal(result.code, code); }
 function interval(hours, minutes = 60) {
-  const start = new Date(Date.now() + hours * 3600_000); start.setUTCMinutes(0, 0, 0);
+  const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Colombo", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
+  const date = new Date(Date.parse(`${today}T00:00:00Z`) + hours * 86_400_000).toISOString().slice(0, 10);
+  const window = officeWindow(date, testShift ?? { mode: "FULL_DAY", startMinute: 0, durationMinutes: 1440 });
+  const start = new Date(window.startTime.getTime() + 60 * 60_000);
   return { startTime: start.toISOString(), endTime: new Date(start.valueOf() + minutes * 60_000).toISOString() };
 }
 const booking = (range, title) => ({ resourceId, title: `${title} ${tag}`, ...range });
 
 try {
+  testShift = await prisma.officeShift.findFirst({ where: { isActive: true } });
   const original = { users: await prisma.user.count(), reservations: await prisma.reservation.count(), notifications: await prisma.notification.count() };
   const beforeSeed = await prisma.department.count();
   await seedDepartments(prisma); await seedDepartments(prisma);
