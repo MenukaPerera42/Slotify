@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import {
-  activeUserListSchema, availabilitySchema, createAdminReservationSchema, createReservationSchema, dailySchema, idSchema, reservationListSchema,
+  activeUserListSchema, availabilitySchema, createAdminReservationSchema, createReservationSchema, dailySchema, idSchema, reservationListSchema, updateReservationTimeSchema,
 } from "../schemas/reservation-schema";
 import type { ReservationResult } from "../types";
 import { ReservationError } from "../types";
@@ -22,7 +22,7 @@ async function requireAdminForCorrection() {
 }
 import {
   approveReservation, availability, cancelReservation, createAdminReservation, createReservation, dailyAvailability,
-  getReservation, groupedReservationsForDate, listActiveUsers, listReservations, pendingReservationCount, rejectReservation, reservationsForDate,
+  getReservation, groupedReservationsForDate, listActiveUsers, listReservations, pendingReservationCount, rejectReservation, reservationsForDate, updateReservationTime,
 } from "../services/reservation-service";
 
 function databaseCode(error: unknown): string | undefined {
@@ -78,6 +78,16 @@ export async function createAdminReservationAction(input: unknown) {
     const item = await createAdminReservation(createAdminReservationSchema.parse(input));
     refresh();
     return item;
+  });
+}
+export async function updateReservationTimeAction(input: unknown) {
+  return run(async () => {
+    // Authorize before validating untrusted input, following admin correction actions.
+    await requireAdminForCorrection();
+    const result = await updateReservationTime(updateReservationTimeSchema.parse(input));
+    refresh();
+    revalidatePath(`/resources/${result.reservation.resourceId}`);
+    return result;
   });
 }
 export async function listActiveUsersAction(input: unknown = {}) {

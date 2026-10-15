@@ -14,6 +14,7 @@
     "test:notifications": "node --env-file=.env tests/notifications-stage5e.mjs",
     "test:departments": "node --env-file=.env --import tsx tests/departments-stage6a.mjs",
     "test:admin-taxonomy": "node --env-file=.env tests/admin-taxonomy-stage7d1.mjs",
+    "test:reservation-time-edit": "node --env-file=.env --import tsx tests/admin-reservation-time-edit-stage7d2a.mjs",
     "test:stage6b": "node --env-file=.env tests/departments-stage6b.mjs",
     "test:stage6b1": "node --env-file=.env --import tsx tests/stage6b1-refinements.mjs",
     "test:dashboard": "node --env-file=.env --import tsx tests/dashboard-stage6c.mjs",

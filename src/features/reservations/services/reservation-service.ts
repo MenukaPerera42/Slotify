@@ -5,7 +5,7 @@ import { currentUser } from "@/lib/authorization";
 import { prisma } from "@/lib/prisma";
 import { businessDayBounds } from "../utils/business-date";
 import { ReservationError } from "../types";
-import { activeUserListSchema, reservationListSchema, type AvailabilityInput, type CreateAdminReservationInput, type CreateReservationInput, type DailyInput } from "../schemas/reservation-schema";
+import { activeUserListSchema, reservationListSchema, type AvailabilityInput, type CreateAdminReservationInput, type CreateReservationInput, type DailyInput, type UpdateReservationTimeInput } from "../schemas/reservation-schema";
 import { createNotificationsTx } from "@/features/notifications/services/notification-service";
 import { groupAdjacentReservations } from "../utils/group-adjacent";
 import { activeShift, lockSchedulingPolicy } from "@/features/office-shifts/services/office-shift-service";
@@ -121,6 +121,46 @@ export async function createReservation(input: CreateReservationInput) {
 export async function createAdminReservation(input: CreateAdminReservationInput) {
   const user = await admin();
   return insertReservation(input, input.targetUserId ?? null, input.departmentId, user, "APPROVED");
+}
+
+export async function updateReservationTime(input: UpdateReservationTimeInput) {
+  const user = await admin();
+  const startTime = new Date(input.startTime);
+  const endTime = new Date(input.endTime);
+  return prisma.$transaction(async (tx) => {
+    // Match creation's lock order so a shift activation cannot race this validation.
+    await lockSchedulingPolicy(tx);
+    const rows = await tx.$queryRaw<Array<{ id: string }>>`
+      SELECT id FROM reservations WHERE id = ${input.reservationId}::uuid FOR UPDATE`;
+    if (!rows[0]) throw new ReservationError("NOT_FOUND", "Reservation not found.");
+    const existing = await tx.reservation.findUniqueOrThrow({ where: { id: input.reservationId } });
+    if (existing.updatedAt.getTime() !== Date.parse(input.expectedUpdatedAt)) {
+      throw new ReservationError("STALE_UPDATE", "This reservation changed. Refresh it before editing its time.");
+    }
+    if (!blocking.includes(existing.status)) {
+      throw new ReservationError("INVALID_STATUS_TRANSITION", "Only pending or approved reservations can be rescheduled.");
+    }
+    const shift = await activeShift(tx);
+    if (shift && !bookingOperationalDate(startTime, endTime, shift)) {
+      throw new ReservationError("OUTSIDE_SHIFT_HOURS", "The new interval must fit within the active office shift.");
+    }
+    const conflict = await tx.reservation.findFirst({ where: {
+      id: { not: existing.id }, resourceId: existing.resourceId, ...overlap(startTime, endTime),
+    }, select: { id: true } });
+    if (conflict) throw new ReservationError("SLOT_CONFLICT", "The new interval overlaps another reservation for this resource.");
+    // TIMESTAMPTZ(3) and Prisma @updatedAt have millisecond precision. Advance
+    // at least one millisecond so even rapid sequential edits invalidate old views.
+    const updatedAt = new Date(Math.max(Date.now(), existing.updatedAt.getTime() + 1));
+    const updated = await tx.reservation.update({
+      where: { id: existing.id }, data: { startTime, endTime, updatedAt }, select: reservationSelect,
+    });
+    const audit = await tx.reservationTimeChange.create({ data: {
+      reservationId: existing.id, changedByUserId: user.id,
+      previousStartTime: existing.startTime, previousEndTime: existing.endTime,
+      newStartTime: startTime, newEndTime: endTime,
+    } });
+    return { reservation: updated, timeChange: audit };
+  });
 }
 
 export async function listActiveUsers(input: z.output<typeof activeUserListSchema>) {
@@ -314,10 +354,10 @@ export async function groupedReservationsForDate(input: DailyInput) {
   const { start, end } = businessDayBounds(input.date);
   const items = await prisma.reservation.findMany({
     where: { ...overlap(start, end), ...(input.resourceId ? { resourceId: input.resourceId } : {}), ...(input.categoryId ? { resource: { categoryId: input.categoryId } } : {}) },
-    select: { id: true, resourceId: true, departmentId: true, status: true, startTime: true, endTime: true, title: true, userId: true },
+    select: { id: true, resourceId: true, departmentId: true, status: true, startTime: true, endTime: true, updatedAt: true, title: true, userId: true },
   });
   const groups = groupAdjacentReservations(items);
   if (user.role !== "ADMIN") return groups;
-  const details = new Map(items.map(({ id, title, userId }) => [id, { id, title, userId }]));
+  const details = new Map(items.map(({ id, title, userId, startTime, endTime, updatedAt }) => [id, { id, title, userId, startTime, endTime, updatedAt }]));
   return groups.map((group) => ({ ...group, bookings: group.reservationIds.map((id) => details.get(id)!) }));
 }

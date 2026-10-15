@@ -59,6 +59,7 @@ model User {
   receivedNotifications Notification[] @relation("NotificationRecipient")
   actedNotifications    Notification[] @relation("NotificationActor")
   departmentCorrections ReservationDepartmentCorrection[] @relation("DepartmentCorrectionActor")
+  reservationTimeChanges ReservationTimeChange[] @relation("ReservationTimeChangeActor")
   updatedOfficeShifts OfficeShift[] @relation("OfficeShiftUpdater")
   emailChallenges EmailVerificationChallenge[] @relation("EmailChallengeSubject")
   initiatedEmailChallenges EmailVerificationChallenge[] @relation("EmailChallengeInitiator")
@@ -181,6 +182,7 @@ model Reservation {
   createdBy  User?             @relation("ReservationCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
   notifications Notification[]
   departmentCorrections ReservationDepartmentCorrection[]
+  timeChanges ReservationTimeChange[]
 
   @@index([resourceId, startTime, endTime])
   @@index([userId])
@@ -207,6 +209,23 @@ model ReservationDepartmentCorrection {
   @@index([reservationId, createdAt])
   @@index([correctedByUserId])
   @@map("reservation_department_corrections")
+}
+
+model ReservationTimeChange {
+  id                String      @id @default(uuid()) @db.Uuid
+  reservationId     String      @db.Uuid
+  changedByUserId   String      @db.Uuid
+  previousStartTime DateTime    @db.Timestamptz(3)
+  previousEndTime   DateTime    @db.Timestamptz(3)
+  newStartTime      DateTime    @db.Timestamptz(3)
+  newEndTime        DateTime    @db.Timestamptz(3)
+  changedAt         DateTime    @default(now()) @db.Timestamptz(3)
+  reservation       Reservation @relation(fields: [reservationId], references: [id], onDelete: Restrict)
+  changedBy         User        @relation("ReservationTimeChangeActor", fields: [changedByUserId], references: [id], onDelete: Restrict)
+
+  @@index([reservationId, changedAt])
+  @@index([changedByUserId])
+  @@map("reservation_time_changes")
 }
 
 model Notification {

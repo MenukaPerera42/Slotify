@@ -3,7 +3,7 @@ import { z } from "zod";
 export const categoryIdSchema = z.string().uuid();
 const name = z.string().trim().min(2).max(100);
 const description = z.string().trim().max(500).nullable().optional();
-export const createCategorySchema = z.strictObject({ name, description });
+export const createCategorySchema = z.strictObject({ name, description, isActive: z.boolean().default(true) });
 export const updateCategorySchema = z.strictObject({ name: name.optional(), description }).refine(
   (value) => Object.keys(value).length > 0, "Provide at least one field",
 );

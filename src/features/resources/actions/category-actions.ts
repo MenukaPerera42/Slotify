@@ -10,7 +10,11 @@ type CategoryResult<T> = { success: true; data: T } | { success: false; code: Ca
 async function run<T>(work: () => Promise<T>): Promise<CategoryResult<T>> {
   try { return { success: true, data: await work() }; }
   catch (error) {
-    if (error instanceof z.ZodError) return { success: false, code: "INVALID_INPUT", error: "Check the submitted fields.", fieldErrors: error.flatten().fieldErrors as Record<string, string[]> };
+    if (error instanceof z.ZodError) {
+      const flattened = error.flatten();
+      return { success: false, code: "INVALID_INPUT", error: error.issues[0]?.message ?? "Check the submitted fields.",
+        fieldErrors: { ...flattened.fieldErrors, ...(flattened.formErrors.length ? { _form: flattened.formErrors } : {}) } as Record<string, string[]> };
+    }
     if (error instanceof CategoryError) return { success: false, code: error.code, error: error.message };
     if (error instanceof Prisma.PrismaClientKnownRequestError) {
       if (error.code === "P2002") return { success: false, code: "DUPLICATE_NAME", error: "A category with this name already exists." };

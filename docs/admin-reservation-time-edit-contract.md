@@ -1,0 +1,15 @@
+# Stage 7D.2A reservation time edit backend
+
+Import `updateReservationTimeAction` from `@/features/reservations/actions/reservation-actions`.
+
+Input is a strict object `{ reservationId: UUID, startTime: ISO instant, endTime: ISO instant, expectedUpdatedAt: ISO instant }`. Each timestamp must include `Z` or an offset. `startTime` must precede `endTime`. The client obtains `expectedUpdatedAt` from `getReservationAction`, administrator reservation lists, or each individual `bookings[]` item returned by `getGroupedReservationsForDateAction`.
+
+Only an active authenticated ADMIN may call the action. It updates exactly the reservation identified by `reservationId`; it never expands a visual group into multiple writes. A grouped response retains `reservationIds` and, for ADMIN, `bookings: { id, title, userId, startTime, endTime, updatedAt }[]`. The drag UI must expose individual booking details and choose one original ID before submitting. MEMBER grouped results do not include booking IDs or details.
+
+Success is `{ success: true, data: { reservation, timeChange } }`. `reservation` includes the original ID, resource, department, owner, creator, title, status, times, `updatedAt`, and existing selected relations. `timeChange` is the new audit row with the actor, previous times, new times, and change timestamp. Other reservation fields remain unchanged. Only `PENDING` and `APPROVED` records are eligible.
+
+Failures use `{ success: false, code, error, fieldErrors? }`. `INVALID_INPUT` covers malformed UUIDs/timestamps and inverted intervals; `UNAUTHENTICATED` and `FORBIDDEN` cover access; `NOT_FOUND` covers an absent reservation; `INVALID_STATUS_TRANSITION` covers cancelled or rejected records; `STALE_UPDATE` means `expectedUpdatedAt` no longer matches; `OUTSIDE_SHIFT_HOURS` means the interval does not fit the active office shift; `SLOT_CONFLICT` means another pending or approved reservation overlaps the resource. Database errors are never returned raw.
+
+The service locks the scheduling policy, then the reservation row, checks the optimistic token, and updates one row in a transaction. It uses the existing `bookingOperationalDate` rule, including overnight and full-day windows. A precheck reports an existing overlap; PostgreSQL's GiST exclusion constraint remains the final guard against races. `updatedAt` advances by at least one millisecond to prevent two rapid edits from sharing a token. The audit insert shares the transaction. The additive `reservation_time_changes` table has restrictive foreign keys to its original reservation and acting user; existing history is untouched.
+
+On success the action revalidates `/reservations`, `/resources`, `/dashboard`, and `/resources/{resourceId}`. The future drag UI should refresh its individual booking details, timelines, booking summaries, and analytics after success or a stale/conflict error. It must use the returned database times, not assume the dragged client position was saved.

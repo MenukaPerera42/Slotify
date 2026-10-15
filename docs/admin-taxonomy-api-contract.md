@@ -26,12 +26,14 @@ Deactivation refuses departments with active users so their membership is not in
 | Action | Input | Success data |
 | --- | --- | --- |
 | `listCategoriesAction(input?)` | `{ search?, status?: "ALL" \| "ACTIVE" \| "INACTIVE", page?, pageSize? }` | `{ items, total, page, pageSize }`; each item includes `_count.resources` |
-| `createCategoryAction(input)` | `{ name, description? }` | Category |
+| `createCategoryAction(input)` | `{ name, description?, isActive? }` | Category |
 | `updateCategoryAction(id, input)` | UUID, nonempty subset of `{ name?, description? }` | Category |
 | `setCategoryStatusAction({ id, isActive })` | UUID, boolean | Category |
 | `deleteCategoryAction(id)` | UUID | Deleted category |
 
-Category names are trimmed, 2–100 characters, unique without regard to case. Descriptions are nullable and at most 500 characters. Search matches names case insensitively. List pagination matches departments. Errors are `INVALID_INPUT`, `DUPLICATE_NAME`, `NOT_FOUND`, `IN_USE`, `FORBIDDEN`, `UNAUTHENTICATED`, or `DATABASE_ERROR`. Deactivation retains all resource links and old resources remain readable and filterable. Deletion requires zero linked resources; the category foreign key is `RESTRICT`.
+Category names are trimmed, 2–100 characters, unique without regard to case. Descriptions are nullable and at most 500 characters. `isActive` is a boolean and defaults to `true`. Search matches names case insensitively. List pagination matches departments. Errors are `INVALID_INPUT`, `DUPLICATE_NAME`, `NOT_FOUND`, `IN_USE`, `FORBIDDEN`, `UNAUTHENTICATED`, or `DATABASE_ERROR`. Deactivation retains all resource links and old resources remain readable and filterable. Deletion requires zero linked resources; the category foreign key is `RESTRICT`.
+
+Stage 7D.2A resolved category creation from `admin-categories.tsx`: the form already sent `{ name, description, isActive }`, while the strict create schema accepted only `name` and `description`. The server now accepts and stores the boolean. Validation failures retain field-specific errors, with object-level errors under `fieldErrors._form`. No frontend payload change is required.
 
 ## Resource assignment and refresh
 
